@@ -9,10 +9,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
 
-  // Clear any cached HTTPS URLs (local dev artifact)
+  // Clear any cached local IP URLs so production URL is used
   final saved = prefs.getString('api_base_url');
-  if (saved != null && saved.startsWith('https://') &&
-      RegExp(r'172\.|192\.168\.|10\.').hasMatch(saved)) {
+  if (saved != null && (
+    RegExp(r'172\.|192\.168\.|10\.').hasMatch(saved) ||
+    saved.contains('localhost') ||
+    saved.contains('127.0.0.1')
+  )) {
     await prefs.remove('api_base_url');
   }
 

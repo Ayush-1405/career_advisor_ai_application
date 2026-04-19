@@ -28,6 +28,9 @@ void main() async {
           ? savedUrl.substring(0, savedUrl.length - 1)
           : savedUrl;
       AppConfig.baseUrl = urlOverride;
+    } else {
+      // Release mode with local IP — clear it so production URL is used
+      await prefs.remove('api_base_url');
     }
   }
 

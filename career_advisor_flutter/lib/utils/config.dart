@@ -1,10 +1,9 @@
 class AppConfig {
   /// Production backend URL.
   /// For local development, override via the "Change Server URL" button in the app.
-  /// For production deployment, set this to your hosted backend URL.
   static const String _defaultUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://172.20.10.2:3000',
+    defaultValue: 'https://career-advisor-ai-application.onrender.com',
   );
 
   static String _overrideUrl = _defaultUrl;
