@@ -57,11 +57,30 @@ router.get('/my-posts', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/feed/user/:userId
+// GET /api/feed/user/:userId  — respects privacy
 router.get('/user/:userId', authenticate, async (req, res) => {
   try {
+    const User = require('../models/User');
+    const { Connection } = require('../models/index');
+    const targetUser = await User.findById(req.params.userId).lean();
+    const requesterId = req.user._id.toString();
+    const requesterEmail = req.user.email;
+
+    // Privacy check — if private and not connected, return empty
+    if (targetUser?.isPrivate && requesterId !== req.params.userId) {
+      const isConnected = await Connection.findOne({
+        $or: [
+          { followerId: { $in: [requesterId, requesterEmail] }, followedId: req.params.userId, status: 'ACCEPTED' },
+          { followerId: req.params.userId, followedId: { $in: [requesterId, requesterEmail] }, status: 'ACCEPTED' },
+        ],
+      });
+      if (!isConnected) {
+        return res.json({ success: true, data: [], isPrivate: true });
+      }
+    }
+
     const posts = await Post.find({ userId: req.params.userId }).sort({ createdAt: -1 });
-    const data = await Promise.all(posts.map(p => enrichPost(p, req.user._id.toString())));
+    const data = await Promise.all(posts.map(p => enrichPost(p, requesterId)));
     res.json({ success: true, data });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

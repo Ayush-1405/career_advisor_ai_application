@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../utils/theme.dart';
 import '../providers/chat_provider.dart';
-import '../providers/dashboard_provider.dart';
 import '../services/auto_refresh_service.dart';
 
 class MainScaffold extends ConsumerStatefulWidget {
@@ -55,15 +54,15 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
 
-    // Refresh dashboard when navigating TO /dashboard from another screen
-    if (location == '/dashboard' && _lastLocation != '/dashboard') {
+    // Refresh the relevant provider whenever the route changes
+    if (location != _lastLocation) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ref.read(dashboardProvider.notifier).loadData(background: true);
+          ref.read(autoRefreshServiceProvider).refreshForRoute(location);
         }
       });
+      _lastLocation = location;
     }
-    _lastLocation = location;
 
     // Show new message toast
     ref.listen(myChatsProvider, (previous, next) {

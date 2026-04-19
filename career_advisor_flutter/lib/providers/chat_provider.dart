@@ -27,23 +27,27 @@ class MyChatsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
         state = const AsyncValue.data([]);
       }
     } catch (e, st) {
-      if (!background) {
-        state = AsyncValue.error(e, st);
-      } else if (state.value == null) {
-        state = AsyncValue.error(e, st);
-      }
+      if (!background) state = AsyncValue.error(e, st);
     }
   }
+
+  /// Instantly clear unread badge for a room (called when user opens the chat).
+  void markRoomAsRead(String roomId) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncValue.data(
+      current.map((r) => r.chatRoomId == roomId ? r.copyWith(unreadCount: 0) : r).toList(),
+    );
+  }
+
   Future<void> markAllAsRead() async {
     final currentChats = state.valueOrNull;
     if (currentChats == null || currentChats.isEmpty) return;
-
     try {
-      final updatedChats = currentChats.map((room) => room.copyWith(unreadCount: 0)).toList();
+      final updatedChats = currentChats.map((r) => r.copyWith(unreadCount: 0)).toList();
       state = AsyncValue.data(updatedChats);
-
-      final roomsWithUnread = currentChats.where((r) => (r.unreadCount ?? 0) > 0);
-      await Future.wait(roomsWithUnread.map((room) => _apiService.markMessagesAsRead(room.id)));
+      final roomsWithUnread = currentChats.where((r) => (r.unreadCount) > 0);
+      await Future.wait(roomsWithUnread.map((r) => _apiService.markMessagesAsRead(r.id)));
       await fetchChats(background: true);
     } catch (e) {
       state = AsyncValue.data(currentChats);
@@ -53,12 +57,10 @@ class MyChatsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
 
   Future<void> deleteChat(String roomId) async {
     final currentChats = state.valueOrNull ?? [];
-    // Optimistic removal
     state = AsyncValue.data(currentChats.where((r) => r.chatRoomId != roomId).toList());
     try {
       await _apiService.deleteChat(roomId);
     } catch (e) {
-      // Rollback on error
       state = AsyncValue.data(currentChats);
       rethrow;
     }
@@ -66,29 +68,30 @@ class MyChatsNotifier extends StateNotifier<AsyncValue<List<ChatRoom>>> {
 
   Future<void> clearAllChats() async {
     final currentChats = state.valueOrNull ?? [];
-    // Optimistic clear
     state = const AsyncValue.data([]);
     try {
       await _apiService.clearAllChats();
     } catch (e) {
-      // Rollback on error
       state = AsyncValue.data(currentChats);
       rethrow;
     }
   }
 }
 
-// Family provider for specific chat room messages - removed autoDispose for persistence
-final chatMessagesProvider = StateNotifierProvider.family<ChatMessagesNotifier, AsyncValue<List<ChatMessage>>, String>((ref, roomId) {
-  final apiService = ref.watch(apiServiceProvider);
-  return ChatMessagesNotifier(apiService, roomId);
-});
+final chatMessagesProvider = StateNotifierProvider.family<ChatMessagesNotifier, AsyncValue<List<ChatMessage>>, String>(
+  (ref, roomId) {
+    final apiService = ref.watch(apiServiceProvider);
+    return ChatMessagesNotifier(apiService, roomId, ref);
+  },
+);
 
 class ChatMessagesNotifier extends StateNotifier<AsyncValue<List<ChatMessage>>> {
   final ApiService _apiService;
   final String roomId;
+  final Ref _ref;
 
-  ChatMessagesNotifier(this._apiService, this.roomId) : super(const AsyncValue.loading()) {
+  ChatMessagesNotifier(this._apiService, this.roomId, this._ref)
+      : super(const AsyncValue.loading()) {
     fetchMessages();
   }
 
@@ -99,40 +102,63 @@ class ChatMessagesNotifier extends StateNotifier<AsyncValue<List<ChatMessage>>> 
     try {
       final response = await _apiService.fetchMessages(roomId);
       if (response is List) {
-        final msgs = response.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>)).toList();
+        final msgs = response
+            .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+            .toList();
         state = AsyncValue.data(msgs);
-        _apiService.markMessagesAsRead(roomId).catchError((_) {});
+
+        // Mark incoming messages as read + clear badge in chat list
+        _apiService.markMessagesAsRead(roomId).then((_) {
+          _ref.read(myChatsProvider.notifier).markRoomAsRead(roomId);
+        }).catchError((_) {});
       } else {
         state = const AsyncValue.data([]);
       }
     } catch (e, st) {
-      if (!background) {
-        state = AsyncValue.error(e, st);
-      } else if (state.value == null) {
-        state = AsyncValue.error(e, st);
-      }
+      if (!background) state = AsyncValue.error(e, st);
     }
   }
 
+  /// Optimistic send — adds message to list immediately, then syncs.
   Future<void> sendMessage(String receiverId, String content) async {
+    // Optimistic: add a temporary message immediately
+    final tempMsg = ChatMessage(
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      chatRoomId: roomId,
+      senderId: 'me', // will be replaced on refresh
+      content: content,
+      isRead: false,
+      timestamp: DateTime.now(),
+    );
+    final current = state.valueOrNull ?? [];
+    state = AsyncValue.data([...current, tempMsg]);
+
     try {
-      // Optimistic update could be added here, but backend fetch is reliable enough 
-      // if we just await api call then fetchMessages background
       await _apiService.sendMessage(receiverId, content);
+      // Refresh to get real message with correct ID and senderId
       await fetchMessages(background: true);
     } catch (e) {
+      // Rollback optimistic message on failure
+      state = AsyncValue.data(current);
       rethrow;
     }
   }
 
+  /// Mark all messages in this room as read (called when other user opens the chat).
+  /// This updates the isRead flag on our sent messages so "Seen" shows.
+  Future<void> refreshReadStatus() async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    // Re-fetch to get updated isRead flags from server
+    await fetchMessages(background: true);
+  }
+
   Future<void> clearMessages() async {
     final currentMsgs = state.valueOrNull ?? [];
-    // Optimistic clear
     state = const AsyncValue.data([]);
     try {
       await _apiService.clearMessages(roomId);
     } catch (e) {
-      // Rollback on error
       state = AsyncValue.data(currentMsgs);
       rethrow;
     }
@@ -141,12 +167,19 @@ class ChatMessagesNotifier extends StateNotifier<AsyncValue<List<ChatMessage>>> 
 
 final onlineStatusProvider = StreamProvider.family.autoDispose<bool, String>((ref, userId) async* {
   final apiService = ref.watch(apiServiceProvider);
-  final initialStatus = await apiService.getUserStatus(userId);
-  yield initialStatus?['isOnline'] == true;
-  
-  await for (final _ in Stream.periodic(const Duration(seconds: 10))) {
-    final status = await apiService.getUserStatus(userId);
-    yield status?['isOnline'] == true;
+  try {
+    final initialStatus = await apiService.getUserStatus(userId);
+    yield initialStatus?['isOnline'] == true;
+  } catch (_) {
+    yield false;
+  }
+
+  await for (final _ in Stream.periodic(const Duration(seconds: 15))) {
+    try {
+      final status = await apiService.getUserStatus(userId);
+      yield status?['isOnline'] == true;
+    } catch (_) {
+      yield false;
+    }
   }
 });
-

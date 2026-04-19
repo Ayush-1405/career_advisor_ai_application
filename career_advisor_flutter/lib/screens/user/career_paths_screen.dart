@@ -1,3 +1,4 @@
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -54,7 +55,7 @@ class _CareerPathsScreenState extends ConsumerState<CareerPathsScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error fetching career path details: $e');
+      if (kDebugMode) debugPrint('Error fetching career path details: $e');
       if (mounted) {
         setState(() {
           _errorMessage = 'Failed to load career path details';
@@ -73,7 +74,7 @@ class _CareerPathsScreenState extends ConsumerState<CareerPathsScreen> {
         _isBookmarked = bookmarks.contains(widget.initialId);
       });
     } catch (e) {
-      debugPrint('Error checking bookmark status: $e');
+      if (kDebugMode) debugPrint('Error checking bookmark status: $e');
     }
   }
 
@@ -105,7 +106,7 @@ class _CareerPathsScreenState extends ConsumerState<CareerPathsScreen> {
         );
       }
     } catch (e) {
-      debugPrint('Error toggling bookmark: $e');
+      if (kDebugMode) debugPrint('Error toggling bookmark: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to update bookmark')),
@@ -130,7 +131,7 @@ class _CareerPathsScreenState extends ConsumerState<CareerPathsScreen> {
             : null,
       );
     } catch (e) {
-      debugPrint('Error sharing: $e');
+      if (kDebugMode) debugPrint('Error sharing: $e');
     }
   }
 
@@ -252,7 +253,7 @@ class _CareerPathsScreenState extends ConsumerState<CareerPathsScreen> {
           );
         }
       } catch (e) {
-        debugPrint('Error submitting application: $e');
+        if (kDebugMode) debugPrint('Error submitting application: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

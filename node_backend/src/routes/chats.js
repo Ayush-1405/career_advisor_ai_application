@@ -4,9 +4,21 @@ const { ChatRoom, Message } = require('../models/index');
 const { findUserByIdOrEmail } = require('../utils/userHelper');
 
 const getOrCreateRoom = async (userId1, userId2) => {
-  const rooms = await ChatRoom.find({ participantIds: userId1 }).sort({ lastUpdate: -1 });
-  const existing = rooms.find(r => r.participantIds.includes(userId2));
+  // Sort IDs so [A,B] and [B,A] always find the same room
+  const [id1, id2] = [userId1, userId2].sort();
+
+  // Find existing room with exactly these two participants
+  const existing = await ChatRoom.findOne({
+    participantIds: { $all: [userId1, userId2], $size: 2 },
+  });
   if (existing) return existing;
+
+  // Double-check with sorted order to avoid race-condition duplicates
+  const existingSorted = await ChatRoom.findOne({
+    participantIds: { $all: [id1, id2], $size: 2 },
+  });
+  if (existingSorted) return existingSorted;
+
   return ChatRoom.create({ participantIds: [userId1, userId2], lastUpdate: new Date() });
 };
 
@@ -15,7 +27,26 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const userId = req.user._id.toString();
     const rooms = await ChatRoom.find({ participantIds: userId }).sort({ lastUpdate: -1 });
-    const data = await Promise.all(rooms.map(async room => {
+
+    // Deduplicate: keep only the most recent room per other participant
+    const seen = new Map();
+    const uniqueRooms = [];
+    for (const room of rooms) {
+      const otherId = room.participantIds.find(id => id !== userId) || '';
+      if (!seen.has(otherId)) {
+        seen.set(otherId, true);
+        uniqueRooms.push(room);
+      } else {
+        // Merge messages into the kept room and delete this duplicate
+        const keptRoom = uniqueRooms.find(r => r.participantIds.find(id => id !== userId) === otherId);
+        if (keptRoom) {
+          await Message.updateMany({ chatRoomId: room._id.toString() }, { chatRoomId: keptRoom._id.toString() });
+        }
+        await ChatRoom.findByIdAndDelete(room._id);
+      }
+    }
+
+    const data = await Promise.all(uniqueRooms.map(async room => {
       const otherId = room.participantIds.find(id => id !== userId);
       const other = otherId ? await findUserByIdOrEmail(otherId) : null;
       const unread = await Message.countDocuments({

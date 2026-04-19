@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../utils/theme.dart';
-import '../../services/auth_service.dart';
-import '../../services/api_service.dart';
-import '../../models/user.dart';
 import '../../providers/app_auth_provider.dart';
+import '../../providers/dashboard_provider.dart';
 import '../../widgets/animated_screen.dart';
 import '../../providers/theme_provider.dart';
 
@@ -17,43 +15,17 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  User? _user;
-  bool _isLoading = true;
-  Map<String, dynamic> _socialStats = {
-    'connectionsCount': 0,
-  };
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    try {
-      final authService = ref.read(authServiceProvider);
-      final apiService = ref.read(apiServiceProvider);
-
-      final results = await Future.wait([
-        authService.getCurrentUser(),
-        apiService.fetchUserSocialStats().catchError((_) => {}),
-      ]);
-
-      if (mounted) {
-        setState(() {
-          _user = results[0] as User?;
-          _socialStats =
-              results[1] as Map<String, dynamic>? ??
-              {'connectionsCount': 0};
-          _isLoading = false;
-        });
+    // Trigger dashboard load if not already loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final existing = ref.read(dashboardProvider).valueOrNull;
+      if (existing == null) {
+        ref.read(dashboardProvider.notifier).loadData();
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+    });
   }
 
   Future<void> _handleLogout() async {
@@ -78,7 +50,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
       ),
     );
-
     if (confirm == true) {
       await ref.read(appAuthProvider.notifier).logout();
     }
@@ -86,16 +57,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    final dashboardState = ref.watch(dashboardProvider);
+    final data = dashboardState.valueOrNull;
+    final isLoading = dashboardState.isLoading && data == null;
+
+    if (isLoading) {
       return AnimatedScreen(
         child: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
 
+    final user = data?.user;
+    final connectionsCount = data?.socialStats['connectionsCount'] ?? 0;
+
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final topPadding = MediaQuery.of(context).padding.top;
-
     final themeMode = ref.watch(themeProvider);
     final isDarkMode = themeMode == ThemeMode.dark;
 
@@ -154,7 +131,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            _user?.name ?? 'Guest',
+                                            user?.name ?? 'Guest',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 24,
@@ -166,7 +143,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             children: [
                                               _buildFollowInfo(
                                                 'Connections',
-                                                _socialStats['connectionsCount'] ?? 0,
+                                                connectionsCount,
                                               ),
                                             ],
                                           ),

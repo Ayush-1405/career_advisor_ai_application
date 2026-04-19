@@ -79,4 +79,15 @@ class ChatMessage {
       timestamp: DateTime.parse(json['timestamp'] ?? DateTime.now().toIso8601String()),
     );
   }
+
+  ChatMessage copyWith({bool? isRead}) {
+    return ChatMessage(
+      id: id,
+      chatRoomId: chatRoomId,
+      senderId: senderId,
+      content: content,
+      isRead: isRead ?? this.isRead,
+      timestamp: timestamp,
+    );
+  }
 }

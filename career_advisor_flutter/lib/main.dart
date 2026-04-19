@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,28 +14,20 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final savedUrl = prefs.getString('api_base_url');
 
-  // Logic to handle URL overrides safely
   String? urlOverride;
   if (savedUrl != null && savedUrl.startsWith('http')) {
-    // In release mode, ignore local overrides (localhost/10.0.2.2/192.168.x.x etc)
-    // to prevent connection errors on real devices from old debug session settings
-    const bool isRelease = bool.fromEnvironment('dart.vm.product');
-    final bool isLocal =
-        savedUrl.contains('localhost') ||
-        savedUrl.contains('10.') ||
+    // In release mode, ignore local IP overrides from old debug sessions
+    const isRelease = bool.fromEnvironment('dart.vm.product');
+    final isLocal = savedUrl.contains('localhost') ||
         savedUrl.contains('127.0.0.1') ||
-        savedUrl.contains('192.168.') ||
-        savedUrl.contains('172.'); // Common local IP ranges
+        savedUrl.contains('10.0.2.2') ||
+        RegExp(r'192\.168\.|172\.\d+\.|10\.').hasMatch(savedUrl);
 
     if (!isRelease || !isLocal) {
-      urlOverride = savedUrl;
-      // Ensure no trailing slash to avoid // in URL
-      if (urlOverride.endsWith('/')) {
-        urlOverride = urlOverride.substring(0, urlOverride.length - 1);
-      }
+      urlOverride = savedUrl.endsWith('/')
+          ? savedUrl.substring(0, savedUrl.length - 1)
+          : savedUrl;
       AppConfig.baseUrl = urlOverride;
-    } else {
-      debugPrint('Release mode: Ignoring local API override $savedUrl');
     }
   }
 
@@ -68,32 +61,28 @@ class _MyAppState extends ConsumerState<MyApp> {
   void _initDeepLinks() {
     _appLinks = AppLinks();
 
-    // Handle link that launched the app from a cold start
-    // Use a small delay to ensure the router is fully initialized first
+    // Cold start deep link
     _appLinks.getInitialLink().then((uri) {
       if (uri != null) {
-        // Delay to let the router and auth state initialize
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) _handleDeepLink(uri);
         });
       }
     });
 
-    // Handle links while app is already running
+    // Foreground deep link
     _appLinks.uriLinkStream.listen((uri) {
       if (mounted) _handleDeepLink(uri);
     });
   }
 
   void _handleDeepLink(Uri uri) {
-    debugPrint('[DeepLink] Received: $uri');
-    // careerapp://reset-password?token=xxx&email=yyy
+    if (kDebugMode) debugPrint('[DeepLink] $uri');
     if (uri.scheme == 'careerapp' && uri.host == 'reset-password') {
       final token = uri.queryParameters['token'];
       final email = uri.queryParameters['email'];
       if (token != null && email != null) {
-        final router = ref.read(appRouterProvider);
-        router.go(
+        ref.read(appRouterProvider).go(
           '/reset-password?token=${Uri.encodeComponent(token)}&email=${Uri.encodeComponent(email)}',
         );
       }

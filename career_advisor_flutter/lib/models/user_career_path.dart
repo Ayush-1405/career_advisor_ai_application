@@ -33,12 +33,27 @@ class UserCareerPath {
     if (norm == 'PENDING' || norm == 'PROCESSING') {
       norm = 'IN_PROGRESS';
     }
+
+    // careerPath may be a populated Map or a raw string ID
+    CareerPath? parsedCareerPath;
+    final cp = json['careerPath'];
+    if (cp is Map<String, dynamic>) {
+      parsedCareerPath = CareerPath.fromJson(cp);
+    } else if (cp is Map) {
+      parsedCareerPath = CareerPath.fromJson(Map<String, dynamic>.from(cp));
+    } else if (cp is String && cp.isNotEmpty) {
+      // Raw ID — create a placeholder
+      parsedCareerPath = CareerPath(
+        id: cp, title: 'Career Path', description: '', level: '',
+        category: '', image: '', averageSalary: '', growth: '',
+        popularity: 0, requiredSkills: [], careerProgression: [],
+      );
+    }
+
     return UserCareerPath(
       id: json['id']?.toString() ?? '',
-      user: json['user'] != null ? User.fromJson(json['user']) : null,
-      careerPath: json['careerPath'] != null
-          ? CareerPath.fromJson(json['careerPath'])
-          : null,
+      user: json['user'] is Map ? User.fromJson(Map<String, dynamic>.from(json['user'] as Map)) : null,
+      careerPath: parsedCareerPath,
       userId: json['userId']?.toString(),
       careerPathId: json['careerPathId']?.toString(),
       status: norm,

@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
   websiteUrl: String,
   isActive: { type: Boolean, default: true },
   emailVerified: { type: Boolean, default: false },
+  isPrivate: { type: Boolean, default: false },
   lastLogin: Date,
   lastActive: Date,
   createdAt: { type: Date, default: Date.now },

@@ -21,28 +21,28 @@ class AutoRefreshService {
     if (_isActive) return;
     _isActive = true;
 
-    // Feed: every 30s
-    _feedTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Feed: every 20s
+    _feedTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       _ref.read(socialFeedProvider.notifier).fetchFeed(background: true);
     });
 
-    // Connections: every 45s
-    _connectionsTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+    // Connections: every 30s
+    _connectionsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _ref.read(connectionsProvider.notifier).fetchData(background: true);
     });
 
-    // Notifications: every 20s
-    _notificationsTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    // Notifications: every 15s
+    _notificationsTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       _ref.read(notificationsProvider.notifier).fetchNotifications(background: true);
     });
 
-    // Chats: every 30s
-    _chatsTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Chats: every 15s
+    _chatsTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       _ref.read(myChatsProvider.notifier).fetchChats(background: true);
     });
 
-    // Dashboard: every 30s (stale check inside provider prevents unnecessary calls)
-    _dashboardTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Dashboard: every 20s (stale check inside prevents unnecessary calls)
+    _dashboardTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       _ref.read(dashboardProvider.notifier).loadData(background: true);
     });
   }
@@ -67,8 +67,33 @@ class AutoRefreshService {
     ]);
   }
 
-  /// Called after a user action that changes dashboard data
-  /// (resume upload, skills assessment, career apply, profile update, etc.)
+  /// Called on every navigation change — refreshes the relevant provider for the new screen.
+  void refreshForRoute(String route) {
+    switch (route) {
+      case '/feed':
+        _ref.read(socialFeedProvider.notifier).fetchFeed(background: true);
+        break;
+      case '/connections':
+        _ref.read(connectionsProvider.notifier).fetchData(background: true);
+        _ref.read(notificationsProvider.notifier).fetchNotifications(background: true);
+        break;
+      case '/chat':
+        _ref.read(myChatsProvider.notifier).fetchChats(background: true);
+        break;
+      case '/dashboard':
+      case '/home':
+        _ref.read(dashboardProvider.notifier).loadData(background: true);
+        _ref.read(connectionsProvider.notifier).fetchData(background: true);
+        break;
+      case '/profile':
+        _ref.read(dashboardProvider.notifier).loadData(background: true, force: true);
+        _ref.read(myPostsProvider.notifier).fetchMyPosts(background: true);
+        _ref.read(connectionsProvider.notifier).fetchData(background: true);
+        break;
+    }
+  }
+
+  /// Called after a user action that changes dashboard data.
   void invalidateDashboard() {
     _ref.read(dashboardProvider.notifier).loadData(background: true, force: true);
   }

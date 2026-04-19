@@ -94,7 +94,23 @@ router.get('/recommendations', authenticate, async (req, res) => {
 router.get('/my-applications', authenticate, async (req, res) => {
   try {
     const apps = await UserCareerPath.find({ user: req.user._id }).populate('careerPath');
-    res.json(apps);
+
+    // Normalize: if careerPath didn't populate (old string ID), fetch it manually
+    const normalized = await Promise.all(apps.map(async (app) => {
+      const obj = app.toJSON();
+      // If careerPath is a string (failed populate), try to fetch it
+      if (typeof obj.careerPath === 'string' || (obj.careerPath && !obj.careerPath.title)) {
+        const cpId = typeof obj.careerPath === 'string' ? obj.careerPath : obj.careerPath?.id;
+        if (cpId) {
+          const { CareerPath } = require('../models/index');
+          const cp = await CareerPath.findById(cpId).lean().catch(() => null);
+          if (cp) obj.careerPath = { ...cp, id: cp._id?.toString() };
+        }
+      }
+      return obj;
+    }));
+
+    res.json(normalized);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

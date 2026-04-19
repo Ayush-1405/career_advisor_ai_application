@@ -1,3 +1,4 @@
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,7 +29,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           .checkAuth()
           .timeout(const Duration(seconds: 5));
     } catch (e) {
-      debugPrint('Auth check error or timeout: $e');
+      if (kDebugMode) debugPrint('Auth check error or timeout: $e');
     }
 
     await minSplashTime;

@@ -5,6 +5,7 @@ import 'package:remixicon/remixicon.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../widgets/animated_screen.dart';
@@ -76,25 +77,30 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
 
   Future<void> _fetchData({bool background = true}) async {
     if (!background) {
-      _loadProfile();
+      await _loadProfile();
+      // Load social stats alongside profile on first load
+      try {
+        final stats = await ref.read(apiServiceProvider).fetchUserSocialStats();
+        if (mounted) {
+          setState(() {
+            _socialStats = stats as Map<String, dynamic>? ?? {'connectionsCount': 0};
+          });
+        }
+      } catch (_) {}
     } else {
-      // Background refresh
-      Future.wait([
+      await Future.wait([
         _loadProfile(background: true),
         ref.read(connectionsProvider.notifier).fetchData(background: true),
         ref.read(myPostsProvider.notifier).fetchMyPosts(background: true),
-      ]).then((_) async {
-        try {
-          final stats =
-              await ref.read(apiServiceProvider).fetchUserSocialStats();
-          if (mounted) {
-            setState(() {
-            _socialStats = stats as Map<String, dynamic>? ??
-                {'connectionsCount': 0};
-            });
-          }
-        } catch (_) {}
-      });
+      ]);
+      try {
+        final stats = await ref.read(apiServiceProvider).fetchUserSocialStats();
+        if (mounted) {
+          setState(() {
+            _socialStats = stats as Map<String, dynamic>? ?? {'connectionsCount': 0};
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -243,6 +249,43 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
         }
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _pickAndUploadBanner() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.single;
+      if (file.size > 10 * 1024 * 1024) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Banner image must be less than 10MB')));
+        return;
+      }
+      setState(() => _isLoading = true);
+      final fileName = file.name.isNotEmpty ? file.name : 'banner.jpg';
+      // Reuse profile photo upload — it uploads to /api/uploads/image and updates profilePictureUrl
+      // For banner, we upload the image and then manually update bannerUrl
+      final apiService = ref.read(apiServiceProvider);
+      final uploadResp = await apiService.uploadProfilePhoto(
+        filePath: file.path,
+        bytes: file.bytes,
+        filename: fileName,
+      );
+      // uploadProfilePhoto already updates profilePictureUrl — we need bannerUrl separately
+      // Extract the uploaded URL from the response
+      String? imageUrl;
+      if (uploadResp is Map) {
+        imageUrl = (uploadResp['url'] ?? uploadResp['profilePictureUrl'])?.toString();
+      }
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        await apiService.updateUserProfile({'bannerUrl': imageUrl});
+      }
+      await _loadProfile();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Banner updated successfully')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to upload banner: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -406,7 +449,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
     }
 
     final connectionsState = ref.watch(connectionsProvider);
-    final connectionCount = connectionsState.valueOrNull?.network.length ?? 0;
+    final connectionCount = connectionsState.valueOrNull?.network.length ?? 
+        (_socialStats['connectionsCount'] as num?)?.toInt() ?? 0;
     final myPostsState = ref.watch(myPostsProvider);
 
     return AnimatedScreen(
@@ -566,7 +610,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.camera_alt, color: AppTheme.userPrimaryBlue, size: 20),
                       onPressed: () {
-                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Banner upload coming soon')));
+                         _pickAndUploadBanner();
                       },
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(8),
@@ -659,6 +703,8 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                 Row(
                   children: [
                     if (location.isNotEmpty) ...[
+                      Icon(Icons.location_on_outlined, size: 14, color: isDark ? Colors.white54 : AppTheme.gray500),
+                      const SizedBox(width: 4),
                       Text(
                         location,
                         style: TextStyle(
@@ -670,26 +716,10 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                       Text('•', style: TextStyle(color: isDark ? Colors.white54 : AppTheme.gray500)),
                       const SizedBox(width: 8),
                     ],
-                    Text(
-                      'Contact info',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.userPrimaryBlue,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        context.push('/connections');
-                      },
+                    GestureDetector(
+                      onTap: () => _showContactInfoDialog(context, isDark),
                       child: Text(
-                        '${_socialStats['connectionsCount'] ?? 0} connections',
+                        'Contact info',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -699,6 +729,25 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      onTap: () => context.push('/connections'),
+                      child: Text(
+                        '$connectionCount connections',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.userPrimaryBlue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Social links row
+                _buildSocialLinksRow(isDark),
                 const SizedBox(height: 16),
                 
                 // Action Buttons
@@ -718,9 +767,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(
-                      onPressed: () {
-                        // Optional Add section behavior
-                      },
+                      onPressed: () => _showAddSectionSheet(context, isDark),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(color: isDark ? Colors.white38 : AppTheme.gray400),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -735,6 +782,273 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen> {
           )
         ],
       ),
+    );
+  }
+
+  Widget _buildSocialLinksRow(bool isDark) {
+    final linkedin = _profile?['linkedinUrl'] as String? ?? '';
+    final github = _profile?['githubUrl'] as String? ?? '';
+    final website = _profile?['websiteUrl'] as String? ?? '';
+
+    if (linkedin.isEmpty && github.isEmpty && website.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        children: [
+          if (linkedin.isNotEmpty)
+            _socialChip(
+              icon: Remix.linkedin_fill,
+              label: 'LinkedIn',
+              url: linkedin,
+              color: const Color(0xFF0A66C2),
+              isDark: isDark,
+            ),
+          if (github.isNotEmpty)
+            _socialChip(
+              icon: Remix.github_fill,
+              label: 'GitHub',
+              url: github,
+              color: isDark ? Colors.white : Colors.black87,
+              isDark: isDark,
+            ),
+          if (website.isNotEmpty)
+            _socialChip(
+              icon: Remix.global_line,
+              label: 'Website',
+              url: website,
+              color: AppTheme.userPrimaryBlue,
+              isDark: isDark,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _socialChip({
+    required IconData icon,
+    required String label,
+    required String url,
+    required Color color,
+    required bool isDark,
+  }) {
+    return GestureDetector(
+      onTap: () async {
+        final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
+        if (uri != null) {
+          try {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not open $label')),
+              );
+            }
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.4)),
+          borderRadius: BorderRadius.circular(20),
+          color: color.withOpacity(0.08),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showContactInfoDialog(BuildContext context, bool isDark) {
+    final email = _profile?['email'] as String? ?? '';
+    final phone = _profile?['phoneNumber'] as String? ?? '';
+    final linkedin = _profile?['linkedinUrl'] as String? ?? '';
+    final github = _profile?['githubUrl'] as String? ?? '';
+    final website = _profile?['websiteUrl'] as String? ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Contact Info',
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black)),
+                IconButton(
+                  icon: Icon(Icons.close, color: isDark ? Colors.white : Colors.black),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (email.isNotEmpty) _contactRow(Icons.email_outlined, 'Email', email, isDark),
+            if (phone.isNotEmpty) _contactRow(Icons.phone_outlined, 'Phone', phone, isDark),
+            if (linkedin.isNotEmpty) _contactRow(Remix.linkedin_fill, 'LinkedIn', linkedin, isDark),
+            if (github.isNotEmpty) _contactRow(Remix.github_fill, 'GitHub', github, isDark),
+            if (website.isNotEmpty) _contactRow(Remix.global_line, 'Website', website, isDark),
+            if (email.isEmpty && phone.isEmpty && linkedin.isEmpty && github.isEmpty && website.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'No contact information added yet.\nTap "Edit profile" to add your details.',
+                  style: TextStyle(color: isDark ? Colors.white54 : AppTheme.gray500),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _contactRow(IconData icon, String label, String value, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppTheme.userPrimaryBlue),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : AppTheme.gray500)),
+                const SizedBox(height: 2),
+                Text(value,
+                    style: TextStyle(
+                        fontSize: 15,
+                        color: isDark ? Colors.white : AppTheme.gray900,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddSectionSheet(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Add to Profile',
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black)),
+                IconButton(
+                  icon: Icon(Icons.close, color: isDark ? Colors.white : Colors.black),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _addSectionTile(
+              context,
+              icon: Icons.description_outlined,
+              title: 'Resume',
+              subtitle: 'Upload or build your resume',
+              onTap: () { Navigator.pop(context); context.push('/resume-builder'); },
+              isDark: isDark,
+            ),
+            _addSectionTile(
+              context,
+              icon: Icons.psychology_outlined,
+              title: 'Skills Assessment',
+              subtitle: 'Take a skills test to showcase your abilities',
+              onTap: () { Navigator.pop(context); context.push('/skills-assessment'); },
+              isDark: isDark,
+            ),
+            _addSectionTile(
+              context,
+              icon: Icons.explore_outlined,
+              title: 'Career Path',
+              subtitle: 'Apply for a career path',
+              onTap: () { Navigator.pop(context); context.push('/suggestions'); },
+              isDark: isDark,
+            ),
+            _addSectionTile(
+              context,
+              icon: Icons.edit_outlined,
+              title: 'Bio & Social Links',
+              subtitle: 'Add your headline, location, and social links',
+              onTap: () { Navigator.pop(context); _showEditProfileSheet(context, isDark); },
+              isDark: isDark,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _addSectionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppTheme.userPrimaryBlue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: AppTheme.userPrimaryBlue, size: 22),
+      ),
+      title: Text(title,
+          style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : AppTheme.gray900)),
+      subtitle: Text(subtitle,
+          style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white54 : AppTheme.gray500)),
+      trailing: Icon(Icons.arrow_forward_ios, size: 14,
+          color: isDark ? Colors.white38 : AppTheme.gray400),
+      onTap: onTap,
     );
   }
 

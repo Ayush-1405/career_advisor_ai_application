@@ -101,14 +101,20 @@ class _MyApplicationsScreenState extends ConsumerState<MyApplicationsScreen> {
       final apiService = ref.read(apiServiceProvider);
       final response = await apiService.fetchMyApplications();
 
-      final apps = (response is List ? response : [])
-          .map(
-            (e) => UserCareerPath.fromJson(Map<String, dynamic>.from(e as Map)),
-          )
-          .toList()
+      final rawList = response is List ? response : [];
+      final apps = rawList
+          .where((e) => e is Map) // skip any non-map items
+          .map((e) {
+            final map = Map<String, dynamic>.from(e as Map);
+            // Ensure careerPath is a Map, not a string ID
+            if (map['careerPath'] is String) {
+              map['careerPath'] = {'id': map['careerPath'], 'title': 'Career Path', 'category': ''};
+            }
+            return UserCareerPath.fromJson(map);
+          })
           .where((a) {
             final uid = a.user?.id.toString() ?? a.userId ?? '';
-            return uid == userId;
+            return uid.isEmpty || uid == userId; // show all if userId not in response
           })
           .toList();
 

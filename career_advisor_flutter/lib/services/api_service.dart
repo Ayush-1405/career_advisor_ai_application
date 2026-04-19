@@ -33,27 +33,47 @@ class ApiService {
 
   // Skills Assessment
   Future<List<Map<String, dynamic>>> getSkillsQuestions() async {
-    
+    // Career-relevant skills assessment questions
     return [
       {
-        'question': 'How would you rate your JavaScript skills?',
+        'question': 'How would you rate your programming skills overall?',
         'options': ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
       },
       {
-        'question': 'How would you rate your problem-solving skills?',
+        'question': 'How comfortable are you with problem-solving and algorithms?',
+        'options': ['Not comfortable', 'Somewhat comfortable', 'Comfortable', 'Very comfortable'],
+      },
+      {
+        'question': 'How would you rate your communication and teamwork skills?',
+        'options': ['Needs improvement', 'Developing', 'Proficient', 'Excellent'],
+      },
+      {
+        'question': 'How experienced are you with version control (Git)?',
+        'options': ['Never used', 'Basic usage', 'Regular usage', 'Advanced usage'],
+      },
+      {
+        'question': 'How familiar are you with cloud platforms (AWS, GCP, Azure)?',
+        'options': ['Not familiar', 'Basic awareness', 'Some experience', 'Experienced'],
+      },
+      {
+        'question': 'How would you rate your data analysis skills?',
         'options': ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
       },
       {
-        'question': 'How would you rate your communication skills?',
+        'question': 'How comfortable are you with agile/scrum methodologies?',
+        'options': ['Not familiar', 'Aware of concepts', 'Practiced', 'Experienced'],
+      },
+      {
+        'question': 'How would you rate your UI/UX design sense?',
+        'options': ['Minimal', 'Basic', 'Good', 'Strong'],
+      },
+      {
+        'question': 'How experienced are you with databases (SQL/NoSQL)?',
         'options': ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
       },
       {
-        'question': 'How would you rate your Flutter/Dart skills?',
-        'options': ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
-      },
-      {
-        'question': 'How familiar are you with Git version control?',
-        'options': ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
+        'question': 'How would you rate your leadership and project management skills?',
+        'options': ['Developing', 'Emerging', 'Proficient', 'Strong'],
       },
     ];
   }

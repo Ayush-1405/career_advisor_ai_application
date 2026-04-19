@@ -1,3 +1,4 @@
+﻿import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,7 +35,7 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
       final resumes = await ref.read(apiServiceProvider).fetchMyResumes();
       setState(() => _existingResumes = resumes);
     } catch (e) {
-      debugPrint('Error fetching resumes: $e');
+      if (kDebugMode) debugPrint('Error fetching resumes: $e');
     } finally {
       setState(() => _isLoadingResumes = false);
     }
@@ -95,7 +96,7 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error picking file: $e');
+      if (kDebugMode) debugPrint('Error picking file: $e');
     }
   }
 

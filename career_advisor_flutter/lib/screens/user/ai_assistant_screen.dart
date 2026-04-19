@@ -1,10 +1,10 @@
+﻿import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:remixicon/remixicon.dart';
 import '../../services/api_service.dart';
 import '../../services/token_service.dart';
-import '../../services/wit_ai_service.dart';
 import '../../utils/theme.dart';
 import '../../widgets/animated_screen.dart';
 
@@ -95,12 +95,6 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen> {
     _scrollToBottom();
 
     try {
-      // Get Wit.ai analysis concurrently for NLP enhancement
-      final witAnalysis = await ref
-          .read(witAiServiceProvider)
-          .getMessageAnalysis(text);
-      debugPrint('Wit.ai analysis: $witAnalysis');
-
       final response = await ref
           .read(apiServiceProvider)
           .chatWithAssistant(text);

@@ -1,3 +1,4 @@
+﻿import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:remixicon/remixicon.dart';
@@ -49,7 +50,7 @@ class _SuggestionsScreenState extends ConsumerState<SuggestionsScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading suggestions: $e');
+      if (kDebugMode) debugPrint('Error loading suggestions: $e');
       if (mounted) {
         setState(() {
           _suggestions = [];

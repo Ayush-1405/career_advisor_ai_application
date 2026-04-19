@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -44,31 +44,69 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     return ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
   }
 
+  bool _isVideo(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return ['mp4', 'mov', 'avi', 'mkv', 'webm'].contains(ext);
+  }
+
+  /// Extract a clean display name from a filename or URL.
+  String _cleanFileName(String raw) {
+    // If it's a URL, take only the last path segment
+    String name = raw.contains('/') ? raw.split('/').last : raw;
+    // Remove query params
+    if (name.contains('?')) name = name.split('?').first;
+    // Decode URL encoding
+    try { name = Uri.decodeComponent(name); } catch (_) {}
+    return name.isEmpty ? 'File' : name;
+  }
+
   Widget _buildFileBox(String fileName, String fileUrl, bool isMe, bool isDark) {
+    final cleanName = _cleanFileName(fileName);
+    IconData fileIcon = Icons.insert_drive_file;
+    if (_isImage(cleanName)) fileIcon = Icons.image_outlined;
+    else if (_isVideo(cleanName)) fileIcon = Icons.videocam_outlined;
+    else if (cleanName.endsWith('.pdf')) fileIcon = Icons.picture_as_pdf_outlined;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isMe ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: isMe ? Colors.white38 : (isDark ? Colors.white10 : Colors.black12)),
+        color: isMe ? Colors.white.withOpacity(0.2) : (isDark ? Colors.white10 : Colors.black.withOpacity(0.05)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: isMe ? Colors.white38 : (isDark ? Colors.white12 : Colors.black12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.insert_drive_file, color: isMe ? Colors.white : (isDark ? Colors.white70 : Colors.black54), size: 18),
-          const SizedBox(width: 8),
+          Icon(fileIcon, color: isMe ? Colors.white : (isDark ? Colors.white70 : Colors.black54), size: 20),
+          const SizedBox(width: 10),
           Flexible(
-            child: Text(
-              fileName,
-              style: TextStyle(
-                color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                fontWeight: FontWeight.bold,
-                decoration: TextDecoration.underline,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  cleanName,
+                  style: TextStyle(
+                    color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    decoration: TextDecoration.underline,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tap to open',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isMe ? Colors.white70 : (isDark ? Colors.white38 : Colors.black38),
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 8),
+          Icon(Icons.open_in_new, size: 14, color: isMe ? Colors.white54 : (isDark ? Colors.white38 : Colors.black38)),
         ],
       ),
     );
@@ -79,65 +117,149 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
       final RegExp fileRegExp = RegExp(r'\[FILE\|(.*?)\]\((.*?)\)');
       final fileMatch = fileRegExp.firstMatch(content);
       if (fileMatch != null) {
-        final fileName = fileMatch.group(1)!;
+        final rawFileName = fileMatch.group(1)!;
         final fileUrl = fileMatch.group(2)!;
-        final textContent = content.substring(0, fileMatch.start).trim() + (content.substring(fileMatch.end).trim().isEmpty ? '' : '\n' + content.substring(fileMatch.end).trim());
-        
-        final isImage = _isImage(fileName);
+        final cleanName = _cleanFileName(rawFileName);
+        final textBefore = content.substring(0, fileMatch.start).trim();
+        final textAfter = content.substring(fileMatch.end).trim();
+        final extraText = [textBefore, textAfter].where((s) => s.isNotEmpty).join('\n');
+
+        final isImage = _isImage(cleanName);
+        final isVideo = _isVideo(cleanName);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (textContent.trim().isNotEmpty)
-              Text(
-                textContent.trim(),
-                style: TextStyle(
-                  color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
-                  fontSize: 15,
-                ),
-              ),
-            if (textContent.trim().isNotEmpty) const SizedBox(height: 8),
+            if (extraText.isNotEmpty) ...[
+              Text(extraText,
+                  style: TextStyle(
+                      color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
+                      fontSize: 15)),
+              const SizedBox(height: 8),
+            ],
             GestureDetector(
               onTap: () async {
-                final uri = Uri.parse(fileUrl);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
+                final uri = Uri.tryParse(fileUrl);
+                if (uri != null) {
+                  try {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } catch (_) {}
                 }
               },
               child: isImage
                   ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       child: CachedNetworkImage(
                         imageUrl: fileUrl,
-                        width: 250,
+                        width: 240,
                         fit: BoxFit.cover,
-                        errorWidget: (context, error, stackTrace) => _buildFileBox(fileName, fileUrl, isMe, isDark),
+                        placeholder: (_, __) => Container(
+                          width: 240, height: 160,
+                          color: Colors.black12,
+                          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        ),
+                        errorWidget: (_, __, ___) => _buildFileBox(cleanName, fileUrl, isMe, isDark),
                       ),
                     )
-                  : _buildFileBox(fileName, fileUrl, isMe, isDark),
+                  : isVideo
+                      ? _buildVideoPreview(cleanName, fileUrl, isMe, isDark)
+                      : _buildFileBox(cleanName, fileUrl, isMe, isDark),
             ),
           ],
         );
       }
     }
-    
-    return Text(
-      content,
-      style: TextStyle(
-        color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
-        fontSize: 15,
+
+    // Plain text — detect URLs and make them tappable
+    return _buildTextWithLinks(content, isMe, isDark);
+  }
+
+  Widget _buildVideoPreview(String name, String url, bool isMe, bool isDark) {
+    return GestureDetector(
+      onTap: () async {
+        final uri = Uri.tryParse(url);
+        if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+      },
+      child: Container(
+        width: 240,
+        height: 140,
+        decoration: BoxDecoration(
+          color: Colors.black87,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Icon(Icons.play_circle_fill, color: Colors.white, size: 48),
+            Positioned(
+              bottom: 8, left: 8, right: 8,
+              child: Text(
+                _cleanFileName(name),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildTextWithLinks(String text, bool isMe, bool isDark) {
+    final urlRegex = RegExp(r'https?://[^\s]+');
+    final matches = urlRegex.allMatches(text);
+    if (matches.isEmpty) {
+      return Text(text,
+          style: TextStyle(
+              color: isMe ? Colors.white : (isDark ? Colors.white : Colors.black87),
+              fontSize: 15));
+    }
+
+    final spans = <InlineSpan>[];
+    int last = 0;
+    final textColor = isMe ? Colors.white : (isDark ? Colors.white : Colors.black87);
+
+    for (final m in matches) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: text.substring(last, m.start), style: TextStyle(color: textColor, fontSize: 15)));
+      }
+      final url = m.group(0)!;
+      spans.add(WidgetSpan(
+        child: GestureDetector(
+          onTap: () async {
+            final uri = Uri.tryParse(url);
+            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+          },
+          child: Text(url,
+              style: TextStyle(
+                  color: isMe ? Colors.white : Colors.blue,
+                  fontSize: 15,
+                  decoration: TextDecoration.underline)),
+        ),
+      ));
+      last = m.end;
+    }
+    if (last < text.length) {
+      spans.add(TextSpan(text: text.substring(last), style: TextStyle(color: textColor, fontSize: 15)));
+    }
+    return RichText(text: TextSpan(children: spans));
   }
 
   @override
   void initState() {
     super.initState();
-    // Poll every 15 seconds for new messages
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+
+    // Mark room as read immediately when opening
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(myChatsProvider.notifier).markRoomAsRead(widget.roomId);
+    });
+
+    // Poll every 10s for new messages + read status updates
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       ref.read(chatMessagesProvider(widget.roomId).notifier).fetchMessages(background: true);
     });
-    
+
     // Ping online status every 30 seconds
     Future.microtask(() => ref.read(apiServiceProvider).pingUserActivity());
     _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -199,7 +321,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         });
       }
     } catch (e) {
-      debugPrint('Error picking file: $e');
+      if (kDebugMode) debugPrint('Error picking file: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to pick file: $e')),
@@ -282,7 +404,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                     ),
                   ),
                   Text(
-                    'LinkedIn Member', // Mock role for LinkedIn feel
+                    'Career Advisor Member',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white54 : const Color(0xFF666666),
@@ -318,7 +440,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                   }
 
                   if (targetUserId.isNotEmpty) {
-                    debugPrint('Navigating to profile for user: $targetUserId');
+                    if (kDebugMode) debugPrint('Navigating to profile for user: $targetUserId');
                     router.push('/profile/member/$targetUserId');
                   } else {
                     messenger.showSnackBar(
@@ -559,18 +681,30 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                                         color: isDark ? Colors.white38 : const Color(0xFF666666),
                                       ),
                                     ),
-                                    if (isMe && index == 0 && msg.isRead)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: Text(
-                                          '• Seen',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: isDark ? Colors.white38 : const Color(0xFF666666),
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
+                                    if (isMe) ...[
+                                      const SizedBox(width: 4),
+                                      // Show "Seen" on last sent message if read, else double tick
+                                      if (msg.isRead && index == 0)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.done_all, size: 12,
+                                                color: isDark ? Colors.lightBlueAccent : AppTheme.userPrimaryBlue),
+                                            const SizedBox(width: 2),
+                                            Text('Seen',
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: isDark ? Colors.lightBlueAccent : AppTheme.userPrimaryBlue,
+                                                    fontWeight: FontWeight.w600)),
+                                          ],
+                                        )
+                                      else if (msg.isRead)
+                                        Icon(Icons.done_all, size: 12,
+                                            color: isDark ? Colors.lightBlueAccent : AppTheme.userPrimaryBlue)
+                                      else
+                                        Icon(Icons.done, size: 12,
+                                            color: isDark ? Colors.white38 : Colors.grey),
+                                    ],
                                   ],
                                 ),
                               ],

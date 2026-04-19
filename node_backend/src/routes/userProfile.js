@@ -16,7 +16,7 @@ router.get('/profile', authenticate, async (req, res) => {
 // PUT /api/user/profile
 router.put('/profile', authenticate, async (req, res) => {
   try {
-    const allowed = ['name', 'email', 'phoneNumber', 'profilePictureUrl', 'bio', 'location', 'linkedinUrl', 'githubUrl', 'websiteUrl'];
+    const allowed = ['name', 'email', 'phoneNumber', 'profilePictureUrl', 'bio', 'location', 'linkedinUrl', 'githubUrl', 'websiteUrl', 'bannerUrl', 'isPrivate'];
     const update = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) update[k] = req.body[k]; });
 
@@ -36,11 +36,40 @@ router.put('/profile', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/user/profile/:userId
+// GET /api/user/profile/:userId  — respects privacy
 router.get('/profile/:userId', authenticate, async (req, res) => {
   try {
     const user = await findUserByIdOrEmail(req.params.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // If the account is private, check if the requester is connected
+    if (user.isPrivate) {
+      const requesterId = req.user._id.toString();
+      const requesterEmail = req.user.email;
+      if (requesterId !== user._id.toString()) {
+        const { Connection } = require('../models/index');
+        const isConnected = await Connection.findOne({
+          $or: [
+            { followerId: { $in: [requesterId, requesterEmail] }, followedId: user._id.toString(), status: 'ACCEPTED' },
+            { followerId: user._id.toString(), followedId: { $in: [requesterId, requesterEmail] }, status: 'ACCEPTED' },
+          ],
+        });
+        if (!isConnected) {
+          // Return limited public info only
+          return res.json({
+            id: user._id.toString(),
+            name: user.name,
+            profilePictureUrl: user.profilePictureUrl,
+            bio: user.bio,
+            location: user.location,
+            role: user.role,
+            isPrivate: true,
+            isConnected: false,
+          });
+        }
+      }
+    }
+
     res.json(user);
   } catch (e) {
     res.status(404).json({ error: 'User not found' });

@@ -8,27 +8,20 @@ import 'utils/theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  
-  // FORCE CLEAR any HTTPS URLs and reset to HTTP
-  final savedUrl = prefs.getString('api_base_url');
-  if (savedUrl != null && savedUrl.startsWith('https://')) {
-    debugPrint('Clearing HTTPS URL: $savedUrl');
+
+  // Clear any cached HTTPS URLs (local dev artifact)
+  final saved = prefs.getString('api_base_url');
+  if (saved != null && saved.startsWith('https://') &&
+      RegExp(r'172\.|192\.168\.|10\.').hasMatch(saved)) {
     await prefs.remove('api_base_url');
   }
-  
-  final cleanUrl = prefs.getString('api_base_url');
 
-  // Logic to handle URL overrides safely
+  final cleanUrl = prefs.getString('api_base_url');
   String? urlOverride;
   if (cleanUrl != null && cleanUrl.startsWith('http')) {
-    urlOverride = cleanUrl;
-    // Ensure no trailing slash to avoid // in URL
-    if (urlOverride.endsWith('/')) {
-      urlOverride = urlOverride.substring(0, urlOverride.length - 1);
-    }
-    debugPrint('Using saved URL: $urlOverride');
-  } else {
-    debugPrint('Using default URL from config');
+    urlOverride = cleanUrl.endsWith('/')
+        ? cleanUrl.substring(0, cleanUrl.length - 1)
+        : cleanUrl;
   }
 
   runApp(
@@ -37,7 +30,7 @@ void main() async {
         if (urlOverride != null)
           baseUrlProvider.overrideWith((ref) => urlOverride!),
       ],
-      child: const ProviderScope(child: MyApp()),
+      child: const MyApp(),
     ),
   );
 }
@@ -48,7 +41,6 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(adminRouterProvider);
-
     return MaterialApp.router(
       title: 'CareerPath Admin',
       debugShowCheckedModeBanner: false,
