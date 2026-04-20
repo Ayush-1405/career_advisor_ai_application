@@ -42,8 +42,7 @@ class _AdminApplicationsScreenState
     _refreshTimer?.cancel();
     if (_autoRefresh) {
       _refreshTimer = Timer.periodic(_refreshInterval, (_) {
-        if (!mounted) return;
-        if (_isLoading) return;
+        if (!mounted || _isLoading) return;
         _loadApplications();
       });
     }
@@ -52,32 +51,20 @@ class _AdminApplicationsScreenState
   Future<void> _loadApplications() async {
     if (!mounted) return;
     try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
+      setState(() { _isLoading = true; _error = null; });
 
-      final adminToken = await ref
-          .read(tokenServiceProvider.notifier)
-          .getAdminToken();
+      final adminToken = await ref.read(tokenServiceProvider.notifier).getAdminToken();
       if (adminToken == null) {
         if (mounted) {
-          setState(() {
-            _error = 'Admin session required';
-            _isLoading = false;
-          });
-          // Navigate to admin login
+          setState(() { _error = 'Admin session required'; _isLoading = false; });
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            context.push('/login');
+            if (mounted) context.push('/login');
           });
         }
         return;
       }
 
-      final apiService = ref.read(apiServiceProvider);
-      final response = await apiService.fetchAllApplications();
-
+      final response = await ref.read(apiServiceProvider).fetchAllApplications();
       if (mounted) {
         setState(() {
           _applications = (response as List)
@@ -88,12 +75,7 @@ class _AdminApplicationsScreenState
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
     }
   }
 
@@ -116,44 +98,28 @@ class _AdminApplicationsScreenState
   Widget build(BuildContext context) {
     return AnimatedScreen(
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC), // Slate 50
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           automaticallyImplyLeading: false,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/dashboard');
-              }
-            },
+            onPressed: () => context.canPop() ? context.pop() : context.go('/dashboard'),
           ),
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,
           elevation: 0,
-          title: const Text(
-            'Career Path Applications',
-            style: TextStyle(
-              color: Color(0xFF0F172A), // Slate 900
-              fontWeight: FontWeight.w700,
-              fontSize: 20,
-              letterSpacing: -0.5,
-            ),
-          ),
+          title: const Text('Career Path Applications',
+              style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w700, fontSize: 20)),
           iconTheme: const IconThemeData(color: Color(0xFF64748B)),
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1),
-            child: Container(color: const Color(0xFFE2E8F0), height: 1), 
+            child: Container(color: const Color(0xFFE2E8F0), height: 1),
           ),
           actions: [
-            const SizedBox(width: 8),
             Container(
               margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: _autoRefresh ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
-                ),
+                border: Border.all(color: _autoRefresh ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0)),
                 color: _autoRefresh ? const Color(0xFFEFF6FF) : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -165,9 +131,7 @@ class _AdminApplicationsScreenState
                 ),
                 tooltip: _autoRefresh ? 'Auto-refresh: ON' : 'Auto-refresh: OFF',
                 onPressed: () {
-                  setState(() {
-                    _autoRefresh = !_autoRefresh;
-                  });
+                  setState(() => _autoRefresh = !_autoRefresh);
                   _setupAutoRefresh();
                 },
               ),
@@ -177,62 +141,63 @@ class _AdminApplicationsScreenState
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: Color(0xFFEF4444)))
             : _error != null
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFEF4444)),
-                    const SizedBox(height: 16),
-                    Text('Error: $_error', style: const TextStyle(color: Color(0xFFEF4444))),
-                  ],
-                ),
-              )
-            : _applications.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.description_outlined, size: 48, color: Color(0xFF94A3B8)),
-                    const SizedBox(height: 16),
-                    const Text('No applications found', style: TextStyle(color: Color(0xFF64748B), fontSize: 16)),
-                    const SizedBox(height: 24),
-                    TextButton.icon(
-                      onPressed: () async {
-                        try {
-                          final api = ref.read(apiServiceProvider);
-                          await api.adminSeedApplications();
-                          await _loadApplications();
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Seed failed: $e'), backgroundColor: Colors.red),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.bolt_rounded, color: Color(0xFF2563EB)),
-                      label: const Text('Seed Demo Applications', style: TextStyle(color: Color(0xFF2563EB))),
-                      style: TextButton.styleFrom(
-                        backgroundColor: const Color(0xFFEFF6FF),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFEF4444)),
+                        const SizedBox(height: 16),
+                        Text('Error: $_error', style: const TextStyle(color: Color(0xFFEF4444))),
+                        const SizedBox(height: 16),
+                        ElevatedButton(onPressed: _loadApplications, child: const Text('Retry')),
+                      ],
                     ),
-                  ],
-                ),
-              )
-            : RefreshIndicator(
-                onRefresh: _loadApplications,
-                color: const Color(0xFFEF4444), // Admin Primary Red
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(24),
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  itemCount: _applications.length,
-                  itemBuilder: (context, index) {
-                    final app = _applications[index];
-                    return _buildApplicationCard(app);
-                  },
-                ),
-              ),
+                  )
+                : _applications.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.description_outlined, size: 48, color: Color(0xFF94A3B8)),
+                            const SizedBox(height: 16),
+                            const Text('No applications found',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 16)),
+                            const SizedBox(height: 24),
+                            TextButton.icon(
+                              onPressed: () async {
+                                try {
+                                  await ref.read(apiServiceProvider).adminSeedApplications();
+                                  await _loadApplications();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Seed failed: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.bolt_rounded, color: Color(0xFF2563EB)),
+                              label: const Text('Seed Demo Applications',
+                                  style: TextStyle(color: Color(0xFF2563EB))),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFFEFF6FF),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadApplications,
+                        color: const Color(0xFFEF4444),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(24),
+                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                          itemCount: _applications.length,
+                          itemBuilder: (context, index) =>
+                              _buildApplicationCard(_applications[index]),
+                        ),
+                      ),
       ),
     );
   }
@@ -274,20 +239,29 @@ class _AdminApplicationsScreenState
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [BoxShadow(color: const Color(0xFF0F172A).withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Career path title + status
+            // Career path + status
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(cp['title']?.toString() ?? 'Unknown Path',
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+                  child: Text(
+                    cp['title']?.toString() ?? 'Unknown Path',
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                  ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -296,7 +270,9 @@ class _AdminApplicationsScreenState
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: statusColor.withOpacity(0.2)),
                   ),
-                  child: Text(rawStatus, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w700)),
+                  child: Text(rawStatus,
+                      style: TextStyle(
+                          color: statusColor, fontSize: 12, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
@@ -313,7 +289,9 @@ class _AdminApplicationsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('👤 User Details', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                  const Text('👤 User Details',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
                   const SizedBox(height: 8),
                   _infoRow(Icons.person_outline, user['name']?.toString() ?? 'Unknown'),
                   _infoRow(Icons.email_outlined, user['email']?.toString() ?? ''),
@@ -340,12 +318,23 @@ class _AdminApplicationsScreenState
                   children: [
                     Row(
                       children: [
-                        const Text('📊 Resume Analysis', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                        const Text('📊 Resume Analysis',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: Color(0xFF64748B))),
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                          child: Text('$score/100', style: TextStyle(color: scoreColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                          decoration: BoxDecoration(
+                            color: scoreColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('$score/100',
+                              style: TextStyle(
+                                  color: scoreColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13)),
                         ),
                       ],
                     ),
@@ -362,13 +351,17 @@ class _AdminApplicationsScreenState
                     if ((latestAnalysis['careerPath'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text('Suggested: ${latestAnalysis['careerPath']}',
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF8B5CF6), fontWeight: FontWeight.w500)),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF8B5CF6),
+                              fontWeight: FontWeight.w500)),
                     ],
                     if ((latestAnalysis['strengths'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text('Strengths: ${latestAnalysis['strengths']}',
                           style: const TextStyle(fontSize: 12, color: Color(0xFF059669)),
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ],
                 ),
@@ -388,7 +381,11 @@ class _AdminApplicationsScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('📄 Resumes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                    const Text('📄 Resumes',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Color(0xFF64748B))),
                     const SizedBox(height: 6),
                     ...resumes.take(3).map((r) {
                       final rMap = r is Map ? r : {};
@@ -398,18 +395,28 @@ class _AdminApplicationsScreenState
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
                           children: [
-                            const Icon(Icons.description_outlined, size: 14, color: Color(0xFF0284C7)),
+                            const Icon(Icons.description_outlined,
+                                size: 14, color: Color(0xFF0284C7)),
                             const SizedBox(width: 6),
-                            Expanded(child: Text(name, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            Expanded(
+                              child: Text(name,
+                                  style: const TextStyle(fontSize: 12),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
                             if (url.isNotEmpty)
                               GestureDetector(
                                 onTap: () async {
                                   final uri = Uri.tryParse(url);
                                   if (uri != null) {
-                                    try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
+                                    try {
+                                      await launchUrl(uri,
+                                          mode: LaunchMode.externalApplication);
+                                    } catch (_) {}
                                   }
                                 },
-                                child: const Icon(Icons.download_outlined, size: 16, color: Color(0xFF0284C7)),
+                                child: const Icon(Icons.download_outlined,
+                                    size: 16, color: Color(0xFF0284C7)),
                               ),
                           ],
                         ),
@@ -423,23 +430,34 @@ class _AdminApplicationsScreenState
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF94A3B8)),
+                const Icon(Icons.calendar_today_rounded,
+                    size: 13, color: Color(0xFF94A3B8)),
                 const SizedBox(width: 5),
                 Text('Applied: ${DateFormat.yMMMd().format(appliedAt)}',
                     style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
               ],
             ),
-            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Color(0xFFE2E8F0))),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: Color(0xFFE2E8F0)),
+            ),
 
+            // Action buttons
             Wrap(
-              spacing: 10, runSpacing: 8, alignment: WrapAlignment.end,
+              spacing: 10,
+              runSpacing: 8,
+              alignment: WrapAlignment.end,
               children: [
                 if (rawStatus != 'REJECTED')
-                  _actionBtn('Reject', Icons.cancel_rounded, const Color(0xFFDC2626), const Color(0xFFFEF2F2), () => _updateStatus(id, 'REJECTED')),
+                  _actionBtn('Reject', Icons.cancel_rounded, const Color(0xFFDC2626),
+                      const Color(0xFFFEF2F2), () => _updateStatus(id, 'REJECTED')),
                 if (rawStatus != 'IN_PROGRESS')
-                  _actionBtn('In Progress', Icons.hourglass_empty_rounded, const Color(0xFFD97706), const Color(0xFFFFFBEB), () => _updateStatus(id, 'IN_PROGRESS')),
+                  _actionBtn('In Progress', Icons.hourglass_empty_rounded,
+                      const Color(0xFFD97706), const Color(0xFFFFFBEB),
+                      () => _updateStatus(id, 'IN_PROGRESS')),
                 if (rawStatus != 'APPROVED')
-                  _actionBtn('Approve', Icons.check_circle_rounded, const Color(0xFF059669), const Color(0xFFECFDF5), () => _updateStatus(id, 'APPROVED')),
+                  _actionBtn('Approve', Icons.check_circle_rounded, const Color(0xFF059669),
+                      const Color(0xFFECFDF5), () => _updateStatus(id, 'APPROVED')),
               ],
             ),
           ],
@@ -455,13 +473,19 @@ class _AdminApplicationsScreenState
         children: [
           Icon(icon, size: 14, color: const Color(0xFF64748B)),
           const SizedBox(width: 6),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF374151)), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            child: Text(text,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
     );
   }
 
-  Widget _actionBtn(String label, IconData icon, Color color, Color bg, VoidCallback onTap) {
+  Widget _actionBtn(
+      String label, IconData icon, Color color, Color bg, VoidCallback onTap) {
     return TextButton.icon(
       onPressed: onTap,
       icon: Icon(icon, size: 16),
