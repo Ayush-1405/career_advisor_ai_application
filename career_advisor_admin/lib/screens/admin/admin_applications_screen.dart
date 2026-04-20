@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../models/user_career_path.dart';
 import '../../services/api_service.dart';
 import '../../services/token_service.dart';
 import '../../widgets/animated_screen.dart';
@@ -19,7 +18,7 @@ class AdminApplicationsScreen extends ConsumerStatefulWidget {
 
 class _AdminApplicationsScreenState
     extends ConsumerState<AdminApplicationsScreen> {
-  List<UserCareerPath> _applications = [];
+  List<Map<String, dynamic>> _applications = [];
   bool _isLoading = true;
   String? _error;
   bool _autoRefresh = false;
@@ -82,7 +81,8 @@ class _AdminApplicationsScreenState
       if (mounted) {
         setState(() {
           _applications = (response as List)
-              .map((e) => UserCareerPath.fromJson(e))
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
               .toList();
           _isLoading = false;
         });
@@ -98,33 +98,17 @@ class _AdminApplicationsScreenState
   }
 
   Future<void> _updateStatus(String id, String status) async {
-    final idx = _applications.indexWhere((a) => a.id == id);
+    final idx = _applications.indexWhere((a) => a['id']?.toString() == id);
     if (idx == -1) return;
-    final previous = _applications[idx];
+    final previous = Map<String, dynamic>.from(_applications[idx]);
     final messenger = ScaffoldMessenger.of(context);
-    setState(() {
-      _applications[idx] = UserCareerPath(
-        id: previous.id,
-        user: previous.user,
-        careerPath: previous.careerPath,
-        status: status,
-        appliedAt: previous.appliedAt,
-        updatedAt: DateTime.now(),
-      );
-    });
+    setState(() => _applications[idx] = {..._applications[idx], 'status': status});
     try {
-      final apiService = ref.read(apiServiceProvider);
-      await apiService.updateApplicationStatus(id, status);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Status updated to $status')),
-      );
+      await ref.read(apiServiceProvider).updateApplicationStatus(id, status);
+      messenger.showSnackBar(SnackBar(content: Text('Status updated to $status')));
     } catch (e) {
-      setState(() {
-        _applications[idx] = previous;
-      });
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed to update status: $e')),
-      );
+      setState(() => _applications[idx] = previous);
+      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
     }
   }
 
@@ -253,34 +237,216 @@ class _AdminApplicationsScreenState
     );
   }
 
-  Widget _buildApplicationCard(UserCareerPath app) {
+  Widget _buildApplicationCard(Map<String, dynamic> app) {
+    final id = app['id']?.toString() ?? '';
+    final rawStatus = (app['status'] ?? 'APPLIED').toString().toUpperCase();
+    final cp = app['careerPath'] is Map ? app['careerPath'] as Map : {};
+    final user = app['user'] is Map ? app['user'] as Map : {};
+    final latestAnalysis = app['latestAnalysis'] is Map
+        ? Map<String, dynamic>.from(app['latestAnalysis'] as Map)
+        : null;
+    final resumes = app['resumes'] is List ? app['resumes'] as List : [];
+    final appliedAt = app['appliedAt'] != null
+        ? DateTime.tryParse(app['appliedAt'].toString()) ?? DateTime.now()
+        : DateTime.now();
+
     Color statusColor;
     Color statusBgColor;
-    switch (app.status) {
+    switch (rawStatus) {
       case 'APPROVED':
-        statusColor = const Color(0xFF059669);
-        statusBgColor = const Color(0xFFD1FAE5);
-        break;
+        statusColor = const Color(0xFF059669); statusBgColor = const Color(0xFFD1FAE5); break;
       case 'REJECTED':
-        statusColor = const Color(0xFFDC2626);
-        statusBgColor = const Color(0xFFFEE2E2);
-        break;
+        statusColor = const Color(0xFFDC2626); statusBgColor = const Color(0xFFFEE2E2); break;
       case 'IN_PROGRESS':
-        statusColor = const Color(0xFFD97706);
-        statusBgColor = const Color(0xFFFEF3C7);
-        break;
+        statusColor = const Color(0xFFD97706); statusBgColor = const Color(0xFFFEF3C7); break;
       default:
-        statusColor = const Color(0xFF2563EB);
-        statusBgColor = const Color(0xFFDBEAFE);
+        statusColor = const Color(0xFF2563EB); statusBgColor = const Color(0xFFDBEAFE);
     }
 
-    // Extract enriched data
-    final rawApp = app as dynamic;
-    final latestAnalysis = rawApp.latestAnalysis as Map<String, dynamic>?;
-    final resumes = (rawApp.resumes as List<dynamic>?) ?? [];
-    final resumeProfile = rawApp.resumeProfile as Map<String, dynamic>?;
     final score = (latestAnalysis?['overallScore'] as num?)?.toInt();
-    final scoreColor = score == null ? Colors.grey : (score >= 75 ? Colors.green : (score >= 50 ? Colors.orange : Colors.red));
+    final scoreColor = score == null
+        ? Colors.grey
+        : (score >= 75 ? Colors.green : (score >= 50 ? Colors.orange : Colors.red));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [BoxShadow(color: const Color(0xFF0F172A).withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Career path title + status
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(cp['title']?.toString() ?? 'Unknown Path',
+                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: statusBgColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusColor.withOpacity(0.2)),
+                  ),
+                  child: Text(rawStatus, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // User info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('👤 User Details', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                  const SizedBox(height: 8),
+                  _infoRow(Icons.person_outline, user['name']?.toString() ?? 'Unknown'),
+                  _infoRow(Icons.email_outlined, user['email']?.toString() ?? ''),
+                  if ((user['phoneNumber'] ?? '').toString().isNotEmpty)
+                    _infoRow(Icons.phone_outlined, user['phoneNumber'].toString()),
+                  if ((user['location'] ?? '').toString().isNotEmpty)
+                    _infoRow(Icons.location_on_outlined, user['location'].toString()),
+                ],
+              ),
+            ),
+
+            // Resume analysis
+            if (latestAnalysis != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scoreColor.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: scoreColor.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('📊 Resume Analysis', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(color: scoreColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                          child: Text('$score/100', style: TextStyle(color: scoreColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (score ?? 0) / 100,
+                        backgroundColor: Colors.grey[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+                        minHeight: 5,
+                      ),
+                    ),
+                    if ((latestAnalysis['careerPath'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text('Suggested: ${latestAnalysis['careerPath']}',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF8B5CF6), fontWeight: FontWeight.w500)),
+                    ],
+                    if ((latestAnalysis['strengths'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Strengths: ${latestAnalysis['strengths']}',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF059669)),
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
+            // Resumes
+            if (resumes.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBAE6FD)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('📄 Resumes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                    const SizedBox(height: 6),
+                    ...resumes.take(3).map((r) {
+                      final rMap = r is Map ? r : {};
+                      final name = rMap['fileName']?.toString() ?? 'Resume';
+                      final url = rMap['fileUrl']?.toString() ?? '';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.description_outlined, size: 14, color: Color(0xFF0284C7)),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(name, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            if (url.isNotEmpty)
+                              GestureDetector(
+                                onTap: () async {
+                                  final uri = Uri.tryParse(url);
+                                  if (uri != null) {
+                                    try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
+                                  }
+                                },
+                                child: const Icon(Icons.download_outlined, size: 16, color: Color(0xFF0284C7)),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF94A3B8)),
+                const SizedBox(width: 5),
+                Text('Applied: ${DateFormat.yMMMd().format(appliedAt)}',
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+              ],
+            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Color(0xFFE2E8F0))),
+
+            Wrap(
+              spacing: 10, runSpacing: 8, alignment: WrapAlignment.end,
+              children: [
+                if (rawStatus != 'REJECTED')
+                  _actionBtn('Reject', Icons.cancel_rounded, const Color(0xFFDC2626), const Color(0xFFFEF2F2), () => _updateStatus(id, 'REJECTED')),
+                if (rawStatus != 'IN_PROGRESS')
+                  _actionBtn('In Progress', Icons.hourglass_empty_rounded, const Color(0xFFD97706), const Color(0xFFFFFBEB), () => _updateStatus(id, 'IN_PROGRESS')),
+                if (rawStatus != 'APPROVED')
+                  _actionBtn('Approve', Icons.check_circle_rounded, const Color(0xFF059669), const Color(0xFFECFDF5), () => _updateStatus(id, 'APPROVED')),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),

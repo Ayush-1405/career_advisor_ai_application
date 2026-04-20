@@ -785,118 +785,135 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
             ),
           ),
 
-          // Premium Chat Input Area
+          // Chat Input Area
           Container(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+            padding: EdgeInsets.fromLTRB(12, 10, 12, MediaQuery.of(context).padding.bottom + 10),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E293B) : Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, -5),
+              border: Border(
+                top: BorderSide(
+                  color: isDark ? Colors.white10 : const Color(0xFFE5E7EB),
+                  width: 1,
                 ),
-              ],
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : Colors.grey.shade100,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.add, size: 24),
-                    color: isDark ? Colors.white70 : const Color(0xFF666666),
-                    onPressed: _pickFile,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                // Attach button
+                GestureDetector(
+                  onTap: _pickFile,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(bottom: 1),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white12 : const Color(0xFFF3F4F6),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.attach_file_rounded,
+                      size: 20,
+                      color: isDark ? Colors.white60 : const Color(0xFF6B7280),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+
+                // Text field + attachment preview
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Attachment preview
                       if (_attachedFile != null)
                         Container(
-                          margin: const EdgeInsets.only(bottom: 8),
+                          margin: const EdgeInsets.only(bottom: 6),
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
                               _isImage(_attachedFile!.name) && _attachedFile!.bytes != null
                                   ? ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(10),
                                       child: Image.memory(
                                         _attachedFile!.bytes!,
-                                        height: 100,
-                                        width: 100,
+                                        height: 90, width: 90,
                                         fit: BoxFit.cover,
                                       ),
                                     )
                                   : Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       decoration: BoxDecoration(
-                                        color: isDark ? Colors.white10 : Colors.grey.shade200,
-                                        borderRadius: BorderRadius.circular(16),
+                                        color: isDark ? Colors.white10 : const Color(0xFFF3F4F6),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: isDark ? Colors.white12 : const Color(0xFFE5E7EB),
+                                        ),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(Icons.attach_file, size: 16),
-                                          const SizedBox(width: 8),
+                                          Icon(Icons.insert_drive_file_outlined, size: 16,
+                                              color: isDark ? Colors.white60 : const Color(0xFF6B7280)),
+                                          const SizedBox(width: 6),
                                           Flexible(
-                                            child: Text(_attachedFile!.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            child: Text(
+                                              _attachedFile!.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: isDark ? Colors.white70 : const Color(0xFF374151),
+                                              ),
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
                               Positioned(
-                                right: -8,
-                                top: -8,
+                                right: -6, top: -6,
                                 child: GestureDetector(
                                   onTap: () => setState(() => _attachedFile = null),
                                   child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.close, size: 12, color: Colors.white),
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                    child: const Icon(Icons.close, size: 11, color: Colors.white),
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         ),
+
+                      // Input field
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        constraints: const BoxConstraints(minHeight: 42, maxHeight: 120),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF3F2EF),
-                          borderRadius: BorderRadius.circular(24),
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF9FAFB),
+                          borderRadius: BorderRadius.circular(22),
                           border: Border.all(
-                            color: isDark ? Colors.white10 : Colors.transparent,
+                            color: isDark ? Colors.white12 : const Color(0xFFD1D5DB),
+                            width: 1.2,
                           ),
                         ),
                         child: TextField(
                           controller: _msgController,
-                          maxLines: 4,
+                          maxLines: 5,
                           minLines: 1,
                           style: TextStyle(
-                            color: isDark ? Colors.white : Colors.black,
+                            color: isDark ? Colors.white : const Color(0xFF111827),
                             fontSize: 15,
+                            height: 1.4,
                           ),
-                          onChanged: (val) {
-                            setState((){});
-                          },
+                          onChanged: (_) => setState(() {}),
                           decoration: InputDecoration(
-                            hintText: 'Type a message...',
+                            hintText: 'Message...',
                             hintStyle: TextStyle(
-                              color: isDark ? Colors.white38 : const Color(0xFF888888),
+                              color: isDark ? Colors.white38 : const Color(0xFF9CA3AF),
                               fontSize: 15,
                             ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             border: InputBorder.none,
                           ),
                         ),
@@ -904,35 +921,40 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+
+                // Send button
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                  duration: const Duration(milliseconds: 180),
+                  transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
                   child: _isSending
-                      ? const Padding(
-                          padding: EdgeInsets.all(10.0),
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
+                      ? const SizedBox(
+                          key: ValueKey('loading'),
+                          width: 40, height: 40,
+                          child: Padding(
+                            padding: EdgeInsets.all(10),
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         )
-                      : Container(
+                      : GestureDetector(
                           key: ValueKey(_msgController.text.trim().isNotEmpty || _attachedFile != null),
-                          decoration: BoxDecoration(
-                            color: (_msgController.text.trim().isNotEmpty || _attachedFile != null)
-                                ? const Color(0xFF0A66C2)
-                                : (isDark ? Colors.white10 : Colors.grey.shade200),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.send, size: 20),
-                            color: (_msgController.text.trim().isNotEmpty || _attachedFile != null)
-                                ? Colors.white
-                                : (isDark ? Colors.white38 : Colors.grey.shade400),
-                            onPressed: _sendMessage,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          onTap: _sendMessage,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 40, height: 40,
+                            decoration: BoxDecoration(
+                              color: (_msgController.text.trim().isNotEmpty || _attachedFile != null)
+                                  ? AppTheme.userPrimaryBlue
+                                  : (isDark ? Colors.white12 : const Color(0xFFE5E7EB)),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.send_rounded,
+                              size: 18,
+                              color: (_msgController.text.trim().isNotEmpty || _attachedFile != null)
+                                  ? Colors.white
+                                  : (isDark ? Colors.white30 : const Color(0xFFD1D5DB)),
+                            ),
                           ),
                         ),
                 ),

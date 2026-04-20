@@ -101,8 +101,8 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
         location == '/dashboard' ||
         location == '/feed' ||
         location == '/connections' ||
-        location == '/profile' ||
-        location == '/chat';
+        location == '/jobs' ||
+        location == '/profile';
 
     if (!showBottomNav) return widget.child;
 
@@ -149,45 +149,10 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
                 activeIcon: Icon(Icons.people),
                 label: 'Network',
               ),
-              BottomNavigationBarItem(
-                icon: Consumer(
-                  builder: (context, ref, child) {
-                    final chatsState = ref.watch(myChatsProvider);
-                    final unreadCount = _totalUnread(chatsState);
-                    if (unreadCount > 0) {
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          const Icon(Icons.chat_outlined),
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              constraints: const BoxConstraints(
-                                  minWidth: 14, minHeight: 14),
-                              child: Text(
-                                '$unreadCount',
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-                    return const Icon(Icons.chat_outlined);
-                  },
-                ),
-                activeIcon: const Icon(Icons.chat),
-                label: 'Chat',
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.work_outline),
+                activeIcon: Icon(Icons.work),
+                label: 'Jobs',
               ),
               const BottomNavigationBarItem(
                 icon: Icon(Icons.person_outline),
@@ -205,7 +170,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
     if (location == '/home') return 0;
     if (location == '/feed') return 1;
     if (location == '/connections') return 2;
-    if (location == '/chat') return 3;
+    if (location == '/jobs') return 3;
     if (location == '/profile') return 4;
     return 0;
   }
@@ -215,7 +180,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
       case 0: context.go('/home'); break;
       case 1: context.go('/feed'); break;
       case 2: context.go('/connections'); break;
-      case 3: context.go('/chat'); break;
+      case 3: context.go('/jobs'); break;
       case 4: context.go('/profile'); break;
     }
   }

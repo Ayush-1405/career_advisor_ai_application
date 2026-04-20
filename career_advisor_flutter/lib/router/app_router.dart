@@ -32,6 +32,7 @@ import '../screens/user/saved_careers_screen.dart';
 import '../screens/user/member_profile_screen.dart';
 import '../screens/user/resume_builder_screen.dart';
 
+import '../screens/user/jobs_screen.dart';
 import '../screens/user/home_screen.dart';
 import '../screens/user/social_feed_screen.dart';
 import '../screens/user/connections_screen.dart';
@@ -222,6 +223,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 ConnectionsScreen(initialIndex: initialIndex),
               );
             },
+          ),
+          GoRoute(
+            path: '/jobs',
+            pageBuilder: (context, state) =>
+                _buildAnimatedPage(state, const JobsScreen()),
           ),
           GoRoute(
             path: '/chat',

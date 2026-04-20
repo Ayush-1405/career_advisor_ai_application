@@ -855,7 +855,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
   }
 
   Widget _buildActivityList() {
-    final activities = _reports!['userActivities'] as List<dynamic>? ?? [];
+    final activities = (_reports!['userActivityReports'] as List<dynamic>?) ?? [];
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -913,15 +913,14 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            activity['activityType'] ?? '',
-                            style: TextStyle(color: Colors.grey[700]),
+                            activity['activityType']?.toString().replaceAll('_', ' ').toUpperCase() ?? '',
+                            style: TextStyle(color: Colors.grey[700], fontSize: 13),
                           ),
                           Text(
-                            activity['timestamp'] ?? '',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[400],
-                            ),
+                            activity['timestamp'] != null
+                                ? _formatActivityDate(activity['timestamp'].toString())
+                                : '',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
                           ),
                         ],
                       ),
@@ -936,7 +935,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
   }
 
   Widget _buildResumeAnalysisList() {
-    final analyses = _reports!['resumeAnalyses'] as List<dynamic>? ?? [];
+    final analyses = (_reports!['resumeAnalysisReports'] as List<dynamic>?) ?? [];
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -1009,6 +1008,21 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
         ),
       ),
     );
+  }
+
+  String _formatActivityDate(String raw) {
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+      if (diff.inDays < 1) return '${diff.inHours}h ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
+      return '${dt.day}/${dt.month}/${dt.year}';
+    } catch (_) {
+      return raw;
+    }
   }
 
   Widget _buildDataTables() {
