@@ -21,6 +21,22 @@
 -keepattributes Signature
 -keepattributes Exceptions
 
+# ── Fix R8 missing class errors ───────────────────────────────────────────────
+
+# Google Play Core (deferred components / split install)
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+
+# Error-prone annotations (compile-time only, safe to ignore at runtime)
+-dontwarn com.google.errorprone.annotations.**
+
+# javax.annotation (not present in Android SDK)
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.concurrent.**
+
+# Google Tink crypto library annotations
+-dontwarn com.google.crypto.tink.**
+
 # Google Play Core
 -keep class com.google.android.play.core.** { *; }
 -dontwarn com.google.android.play.core.**
