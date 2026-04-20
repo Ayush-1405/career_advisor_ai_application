@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/user_career_path.dart';
 import '../../services/api_service.dart';
 import '../../services/token_service.dart';
@@ -257,21 +258,29 @@ class _AdminApplicationsScreenState
     Color statusBgColor;
     switch (app.status) {
       case 'APPROVED':
-        statusColor = const Color(0xFF059669); // Emerald 600
-        statusBgColor = const Color(0xFFD1FAE5); // Emerald 100
+        statusColor = const Color(0xFF059669);
+        statusBgColor = const Color(0xFFD1FAE5);
         break;
       case 'REJECTED':
-        statusColor = const Color(0xFFDC2626); // Red 600
-        statusBgColor = const Color(0xFFFEE2E2); // Red 100
+        statusColor = const Color(0xFFDC2626);
+        statusBgColor = const Color(0xFFFEE2E2);
         break;
       case 'IN_PROGRESS':
-        statusColor = const Color(0xFFD97706); // Amber 600
-        statusBgColor = const Color(0xFFFEF3C7); // Amber 100
+        statusColor = const Color(0xFFD97706);
+        statusBgColor = const Color(0xFFFEF3C7);
         break;
       default:
-        statusColor = const Color(0xFF2563EB); // Blue 600
-        statusBgColor = const Color(0xFFDBEAFE); // Blue 100
+        statusColor = const Color(0xFF2563EB);
+        statusBgColor = const Color(0xFFDBEAFE);
     }
+
+    // Extract enriched data
+    final rawApp = app as dynamic;
+    final latestAnalysis = rawApp.latestAnalysis as Map<String, dynamic>?;
+    final resumes = (rawApp.resumes as List<dynamic>?) ?? [];
+    final resumeProfile = rawApp.resumeProfile as Map<String, dynamic>?;
+    final score = (latestAnalysis?['overallScore'] as num?)?.toInt();
+    final scoreColor = score == null ? Colors.grey : (score >= 75 ? Colors.green : (score >= 50 ? Colors.orange : Colors.red));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -279,152 +288,208 @@ class _AdminApplicationsScreenState
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: const Color(0xFF0F172A).withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header: career path + status
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        app.careerPath?.title ?? 'Unknown Path',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0F172A), // Slate 900
-                          letterSpacing: -0.3,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.person_outline_rounded, size: 16, color: Color(0xFF64748B)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              app.user?.name ?? 'Unknown User',
-                              style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.email_outlined, size: 16, color: Color(0xFF64748B)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              app.user?.email ?? 'Unknown Email',
-                              style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  child: Text(
+                    app.careerPath?.title ?? 'Unknown Path',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: statusBgColor,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: statusColor.withOpacity(0.2)),
                   ),
-                  child: Text(
-                    app.status,
-                    style: TextStyle(
-                      color: statusColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
+                  child: Text(app.status, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF94A3B8)),
-                const SizedBox(width: 6),
-                Text(
-                  'Applied on ${DateFormat.yMMMd().add_jm().format(app.appliedAt)}',
-                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                ),
-              ],
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Divider(height: 1, color: Color(0xFFE2E8F0)),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.end,
+            const SizedBox(height: 12),
+
+            // User info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (app.status != 'REJECTED')
-                    TextButton.icon(
-                      onPressed: () => _updateStatus(app.id, 'REJECTED'),
-                      icon: const Icon(Icons.cancel_rounded, size: 18),
-                      label: const Text('Reject'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFDC2626), // Red 600
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        backgroundColor: const Color(0xFFFEF2F2),
-                      ),
-                    ),
-                  if (app.status != 'IN_PROGRESS')
-                    TextButton.icon(
-                      onPressed: () => _updateStatus(app.id, 'IN_PROGRESS'),
-                      icon: const Icon(Icons.hourglass_empty_rounded, size: 18),
-                      label: const Text('In Progress'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFD97706), // Amber 600
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        backgroundColor: const Color(0xFFFFFBEB),
-                      ),
-                    ),
-                  if (app.status != 'APPROVED')
-                    TextButton.icon(
-                      onPressed: () => _updateStatus(app.id, 'APPROVED'),
-                      icon: const Icon(Icons.check_circle_rounded, size: 18),
-                      label: const Text('Approve'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF059669), // Emerald 600
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        backgroundColor: const Color(0xFFECFDF5),
-                      ),
-                    ),
+                  const Text('👤 User Details', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                  const SizedBox(height: 8),
+                  _infoRow(Icons.person_outline, app.user?.name ?? 'Unknown'),
+                  _infoRow(Icons.email_outlined, app.user?.email ?? ''),
+                  if (app.user?.phoneNumber != null && app.user!.phoneNumber!.isNotEmpty)
+                    _infoRow(Icons.phone_outlined, app.user!.phoneNumber!),
+                  if (app.user?.location != null && app.user!.location!.isNotEmpty)
+                    _infoRow(Icons.location_on_outlined, app.user!.location!),
                 ],
               ),
             ),
+
+            // Resume analysis
+            if (latestAnalysis != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scoreColor.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: scoreColor.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text('📊 Resume Analysis', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: scoreColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('$score/100', style: TextStyle(color: scoreColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (score ?? 0) / 100,
+                        backgroundColor: Colors.grey[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+                        minHeight: 5,
+                      ),
+                    ),
+                    if (latestAnalysis['careerPath'] != null && (latestAnalysis['careerPath'] as String).isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text('Suggested: ${latestAnalysis['careerPath']}',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF8B5CF6), fontWeight: FontWeight.w500)),
+                    ],
+                    if (latestAnalysis['strengths'] != null && (latestAnalysis['strengths'] as String).isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Strengths: ${latestAnalysis['strengths']}',
+                          style: const TextStyle(fontSize: 12, color: Color(0xFF059669)),
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+
+            // Resumes
+            if (resumes.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFBAE6FD)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('📄 Resumes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF64748B))),
+                    const SizedBox(height: 6),
+                    ...resumes.take(3).map((r) {
+                      final name = r['fileName'] ?? 'Resume';
+                      final url = r['fileUrl']?.toString() ?? '';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.description_outlined, size: 14, color: Color(0xFF0284C7)),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(name, style: const TextStyle(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            if (url.isNotEmpty)
+                              GestureDetector(
+                                onTap: () async {
+                                  final uri = Uri.tryParse(url);
+                                  if (uri != null) {
+                                    try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
+                                  }
+                                },
+                                child: const Icon(Icons.download_outlined, size: 16, color: Color(0xFF0284C7)),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF94A3B8)),
+                const SizedBox(width: 5),
+                Text('Applied: ${DateFormat.yMMMd().format(app.appliedAt)}',
+                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+              ],
+            ),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Color(0xFFE2E8F0))),
+
+            // Action buttons
+            Wrap(
+              spacing: 10, runSpacing: 8, alignment: WrapAlignment.end,
+              children: [
+                if (app.status != 'REJECTED')
+                  _actionBtn('Reject', Icons.cancel_rounded, const Color(0xFFDC2626), const Color(0xFFFEF2F2), () => _updateStatus(app.id, 'REJECTED')),
+                if (app.status != 'IN_PROGRESS')
+                  _actionBtn('In Progress', Icons.hourglass_empty_rounded, const Color(0xFFD97706), const Color(0xFFFFFBEB), () => _updateStatus(app.id, 'IN_PROGRESS')),
+                if (app.status != 'APPROVED')
+                  _actionBtn('Approve', Icons.check_circle_rounded, const Color(0xFF059669), const Color(0xFFECFDF5), () => _updateStatus(app.id, 'APPROVED')),
+              ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF64748B)),
+          const SizedBox(width: 6),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF374151)), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionBtn(String label, IconData icon, Color color, Color bg, VoidCallback onTap) {
+    return TextButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: TextButton.styleFrom(
+        foregroundColor: color,
+        backgroundColor: bg,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }

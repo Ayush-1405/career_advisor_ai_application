@@ -264,31 +264,97 @@ router.get('/reports/overview', async (req, res) => {
 
 router.get('/reports/export', async (req, res) => {
   try {
-    const format = req.query.format || 'csv';
-    if (format !== 'csv') return res.status(400).json({ error: 'Only CSV supported' });
+    const format = (req.query.format || 'csv').toLowerCase();
+
     const totalUsers = await User.countDocuments();
     const activeUsers = await User.countDocuments({ isActive: true });
     const totalResumes = await Resume.countDocuments();
     const totalAnalyses = await ResumeAnalysis.countDocuments();
     const adminCount = await User.countDocuments({ role: 'ADMIN' });
     const userCount = await User.countDocuments({ role: 'USER' });
+    const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
+    const newUsersThisMonth = await User.countDocuments({ createdAt: { $gte: startOfMonth } });
+    const analyses = await ResumeAnalysis.find({}, 'overallScore');
+    const avgScore = analyses.length
+      ? (analyses.reduce((s, a) => s + (a.overallScore || 0), 0) / analyses.length).toFixed(1)
+      : '0';
 
-    const csv = [
+    // Recent activities for report
+    const activities = await UserActivity.find().sort({ createdAt: -1 }).limit(100).populate('user');
+
+    if (format === 'pdf') {
+      const PDFDocument = require('pdfkit');
+      const doc = new PDFDocument({ margin: 50, size: 'A4' });
+      const chunks = [];
+      doc.on('data', c => chunks.push(c));
+      doc.on('end', () => {
+        const pdf = Buffer.concat(chunks);
+        const filename = `admin-report-${new Date().toISOString().split('T')[0]}.pdf`;
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.send(pdf);
+      });
+
+      // Header
+      doc.fontSize(22).font('Helvetica-Bold').text('Career Advisor — Admin Report', { align: 'center' });
+      doc.fontSize(11).font('Helvetica').fillColor('#666').text(`Generated: ${new Date().toLocaleString()}`, { align: 'center' });
+      doc.moveDown(2);
+
+      // Summary
+      doc.fontSize(16).font('Helvetica-Bold').fillColor('#000').text('Platform Summary');
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke(); doc.moveDown(0.5);
+      const rows = [
+        ['Total Users', totalUsers], ['Active Users', activeUsers],
+        ['New Users This Month', newUsersThisMonth], ['Total Resumes', totalResumes],
+        ['Total Analyses', totalAnalyses], ['Avg Resume Score', `${avgScore}/100`],
+        ['ADMIN Users', adminCount], ['Regular Users', userCount],
+      ];
+      rows.forEach(([label, val]) => {
+        doc.fontSize(12).font('Helvetica-Bold').text(`${label}: `, { continued: true });
+        doc.font('Helvetica').text(String(val));
+      });
+      doc.moveDown(1.5);
+
+      // User Activities
+      doc.fontSize(16).font('Helvetica-Bold').text('Recent User Activities (last 100)');
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke(); doc.moveDown(0.5);
+      activities.forEach(a => {
+        const name = a.user?.name || 'Unknown';
+        const email = a.user?.email || '';
+        const type = a.activityType || '';
+        const date = a.createdAt ? new Date(a.createdAt).toLocaleString() : '';
+        doc.fontSize(10).font('Helvetica')
+          .text(`• ${name} (${email}) — ${type} — ${date}`);
+      });
+
+      doc.end();
+      return;
+    }
+
+    // CSV export
+    const csvRows = [
       'Metric,Value',
       `Total Users,${totalUsers}`,
       `Active Users,${activeUsers}`,
+      `New Users This Month,${newUsersThisMonth}`,
       `Total Resumes,${totalResumes}`,
       `Total Analyses,${totalAnalyses}`,
+      `Average Resume Score,${avgScore}`,
       '',
       'Role,Count',
       `ADMIN,${adminCount}`,
       `USER,${userCount}`,
-    ].join('\n');
+      '',
+      'User,Email,Activity,Date',
+      ...activities.map(a =>
+        `"${a.user?.name || ''}","${a.user?.email || ''}","${a.activityType || ''}","${a.createdAt ? new Date(a.createdAt).toISOString() : ''}"`
+      ),
+    ];
 
     const filename = `admin-report-${new Date().toISOString().split('T')[0]}.csv`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'text/csv; charset=UTF-8');
-    res.send(Buffer.from(csv, 'utf-8'));
+    res.send(Buffer.from(csvRows.join('\n'), 'utf-8'));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -316,8 +382,42 @@ router.put('/settings', async (req, res) => {
 
 router.get('/applications', async (req, res) => {
   try {
-    const apps = await UserCareerPath.find().populate('user').populate('careerPath').sort({ appliedAt: -1 });
-    res.json(apps);
+    const { ResumeProfile, ResumeAnalysis: RA } = require('../models/index');
+    const apps = await UserCareerPath.find()
+      .populate('user', 'name email phoneNumber profilePictureUrl bio location linkedinUrl githubUrl websiteUrl role emailVerified createdAt')
+      .populate('careerPath')
+      .sort({ appliedAt: -1 });
+
+    // Enrich each application with the user's latest resume analysis
+    const enriched = await Promise.all(apps.map(async (app) => {
+      const obj = app.toJSON();
+      if (app.user?._id) {
+        const userId = app.user._id.toString();
+        const [resumeProfile, latestAnalysis, resumes] = await Promise.all([
+          ResumeProfile.findOne({ user: userId }).lean(),
+          RA.findOne({ user: userId }).sort({ analyzedAt: -1 }).lean(),
+          Resume.find({ user: userId }).sort({ uploadedAt: -1 }).limit(3).lean(),
+        ]);
+        obj.resumeProfile = resumeProfile;
+        obj.latestAnalysis = latestAnalysis ? {
+          overallScore: latestAnalysis.overallScore,
+          strengths: latestAnalysis.strengths,
+          improvements: latestAnalysis.improvements,
+          careerPath: latestAnalysis.careerPath,
+          feedback: latestAnalysis.feedback,
+          analyzedAt: latestAnalysis.analyzedAt,
+        } : null;
+        obj.resumes = resumes.map(r => ({
+          id: r._id.toString(),
+          fileName: r.originalFileName || r.fileName,
+          fileUrl: r.fileUrl || r.filePath,
+          uploadedAt: r.uploadedAt,
+        }));
+      }
+      return obj;
+    }));
+
+    res.json(enriched);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

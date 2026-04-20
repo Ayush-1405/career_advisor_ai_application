@@ -352,7 +352,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                chat.lastMessage ?? 'New conversation',
+                                                _formatLastMessage(chat.lastMessage),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: TextStyle(
@@ -501,6 +501,23 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         ),
       ),
     );
+  }
+
+  String _formatLastMessage(String? raw) {
+    if (raw == null || raw.isEmpty) return 'New conversation';
+    // Detect file messages: [FILE|filename.ext](url)
+    if (raw.contains('[FILE|')) {
+      final match = RegExp(r'\[FILE\|(.*?)\]').firstMatch(raw);
+      if (match != null) {
+        final name = match.group(1) ?? '';
+        final ext = name.split('.').last.toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) return '📷 Photo';
+        if (['mp4', 'mov', 'avi', 'mkv', 'webm'].contains(ext)) return '🎥 Video';
+        if (ext == 'pdf') return '📄 PDF Document';
+        return '📎 ${name.isNotEmpty ? name : "File"}';
+      }
+    }
+    return raw;
   }
 
   String _formatTime(DateTime dt) {

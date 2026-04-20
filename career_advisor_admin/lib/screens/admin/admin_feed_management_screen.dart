@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../widgets/animated_screen.dart';
@@ -153,8 +155,14 @@ class _AdminFeedManagementScreenState
                           padding: const EdgeInsets.all(16),
                           itemBuilder: (context, index) {
                             final post = _posts[index];
+                            final userId = post['userId']?.toString() ?? '';
                             return Card(
-                              margin: const EdgeInsets.only(bottom: 16),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey.shade200),
+                              ),
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
@@ -162,56 +170,70 @@ class _AdminFeedManagementScreenState
                                   children: [
                                     Row(
                                       children: [
-                                        CircleAvatar(
-                                          child: Text(
-                                            (post['userName'] ?? 'U')[0]
-                                                .toUpperCase(),
+                                        GestureDetector(
+                                          onTap: userId.isNotEmpty
+                                              ? () => context.push('/admin/users/$userId')
+                                              : null,
+                                          child: CircleAvatar(
+                                            radius: 20,
+                                            backgroundColor: AppTheme.adminPrimaryRed.withOpacity(0.1),
+                                            backgroundImage: post['userAvatar'] != null && (post['userAvatar'] as String).isNotEmpty
+                                                ? NetworkImage(post['userAvatar'] as String) : null,
+                                            child: (post['userAvatar'] == null || (post['userAvatar'] as String).isEmpty)
+                                                ? Text((post['userName'] ?? 'U')[0].toUpperCase(),
+                                                    style: TextStyle(color: AppTheme.adminPrimaryRed, fontWeight: FontWeight.bold))
+                                                : null,
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                post['userName'] ?? 'Unknown',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                              Text(
-                                                _formatDate(post['createdAt']),
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey[600],
-                                                ),
-                                              ),
-                                            ],
+                                          child: GestureDetector(
+                                            onTap: userId.isNotEmpty
+                                                ? () => context.push('/admin/users/$userId')
+                                                : null,
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(post['userName'] ?? 'Unknown',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                                Text(_formatDate(post['createdAt']),
+                                                    style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.delete,
-                                              color: Colors.red),
-                                          onPressed: () =>
-                                              _deletePost(post['id']),
+                                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                          onPressed: () => _deletePost(post['id']),
+                                          tooltip: 'Delete post',
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 12),
-                                    Text(post['content'] ?? ''),
+                                    const SizedBox(height: 10),
+                                    if (post['content'] != null && (post['content'] as String).isNotEmpty)
+                                      Text(post['content'] ?? '', style: const TextStyle(fontSize: 14)),
                                     const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        Icon(Icons.favorite,
-                                            size: 16, color: Colors.grey[600]),
+                                        Icon(Icons.favorite_border, size: 16, color: Colors.grey[600]),
                                         const SizedBox(width: 4),
-                                        Text('${post['likesCount'] ?? 0}'),
+                                        Text('${post['likesCount'] ?? 0}', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                                         const SizedBox(width: 16),
-                                        Icon(Icons.comment,
-                                            size: 16, color: Colors.grey[600]),
+                                        Icon(Icons.chat_bubble_outline, size: 16, color: Colors.grey[600]),
                                         const SizedBox(width: 4),
-                                        Text('${post['commentsCount'] ?? 0}'),
+                                        Text('${post['commentsCount'] ?? 0}', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                                        if (post['isAchievement'] == true) ...[
+                                          const SizedBox(width: 12),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amber[50],
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Colors.amber.shade200),
+                                            ),
+                                            child: const Text('🏆 Achievement', style: TextStyle(fontSize: 11)),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ],

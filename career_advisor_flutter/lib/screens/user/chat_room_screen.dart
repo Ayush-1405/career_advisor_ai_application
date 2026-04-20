@@ -2,6 +2,7 @@
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,7 +11,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../utils/theme.dart';
 import '../../providers/chat_provider.dart';
 import '../../services/api_service.dart';
-
 import '../../providers/app_auth_provider.dart';
 
 class ChatRoomScreen extends ConsumerStatefulWidget {
@@ -204,6 +204,22 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         ),
       ),
     );
+  }
+
+  /// Returns true if the message contains only a file/image (no text before/after).
+  bool _hasMediaOnly(String content) {
+    if (!content.contains('[FILE|')) return false;
+    final match = RegExp(r'\[FILE\|(.*?)\]\((.*?)\)').firstMatch(content);
+    if (match == null) return false;
+    final before = content.substring(0, match.start).trim();
+    final after = content.substring(match.end).trim();
+    final name = match.group(1) ?? '';
+    // Only treat as media-only if it's an image/video with no surrounding text
+    return before.isEmpty && after.isEmpty && (_isImage(name) || _isVideo(name));
+  }
+
+  String _formatMsgTime(DateTime dt) {
+    return '${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
   Widget _buildTextWithLinks(String text, bool isMe, bool isDark) {
@@ -404,7 +420,11 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                     ),
                   ),
                   Text(
-                    'Career Advisor Member',
+                    _isMuted
+                        ? '🔕 Muted'
+                        : isOnline
+                            ? '🟢 Online'
+                            : 'Career Advisor Member',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white54 : const Color(0xFF666666),
@@ -449,13 +469,19 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                   }
                   break;
                 case 'mute':
-                  setState(() {
-                    _isMuted = !_isMuted;
-                  });
+                  setState(() => _isMuted = !_isMuted);
                   messenger.showSnackBar(
                     SnackBar(
-                      content: Text(_isMuted ? 'Notifications muted for this chat' : 'Notifications unmuted'),
+                      content: Row(
+                        children: [
+                          Icon(_isMuted ? Icons.notifications_off : Icons.notifications_active,
+                              color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Text(_isMuted ? 'Notifications muted' : 'Notifications unmuted'),
+                        ],
+                      ),
                       duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
                     ),
                   );
                   break;
@@ -610,106 +636,143 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                   );
                 }
                 return ListView.builder(
-                  reverse: true, // Show newest at the bottom naturally if we reverse the list view
+                  reverse: true,
                   itemCount: messages.length,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   itemBuilder: (context, index) {
-                    // Because list is reversed, index 0 is at bottom.
                     final msg = messages[messages.length - 1 - index];
                     final bool isMe = msg.senderId == currentUserId;
+                    // Group messages — show avatar only for first in a sequence
+                    final nextMsg = index > 0 ? messages[messages.length - index] : null;
+                    final showAvatar = !isMe && (nextMsg == null || nextMsg.senderId != msg.senderId);
 
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
+                      padding: EdgeInsets.only(
+                        bottom: 2,
+                        top: index == messages.length - 1 ? 8 : 0,
+                      ),
                       child: Row(
                         mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          if (!isMe)
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor: Colors.transparent,
-                              backgroundImage: widget.otherUserAvatar != null
-                                  ? CachedNetworkImageProvider(widget.otherUserAvatar!)
-                                  : null,
-                              child: widget.otherUserAvatar == null
-                                  ? Icon(Icons.person, size: 16, color: Colors.grey.shade400)
+                          // Other user avatar
+                          if (!isMe) ...[
+                            SizedBox(
+                              width: 32,
+                              child: showAvatar
+                                  ? CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: AppTheme.userPrimaryBlue.withOpacity(0.15),
+                                      backgroundImage: widget.otherUserAvatar != null
+                                          ? CachedNetworkImageProvider(widget.otherUserAvatar!)
+                                          : null,
+                                      child: widget.otherUserAvatar == null
+                                          ? Text(
+                                              widget.otherUserName.isNotEmpty
+                                                  ? widget.otherUserName[0].toUpperCase()
+                                                  : 'U',
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                            )
+                                          : null,
+                                    )
                                   : null,
                             ),
-                          if (!isMe) const SizedBox(width: 8),
+                            const SizedBox(width: 6),
+                          ],
+
+                          // Message bubble
                           Flexible(
-                            child: Column(
-                              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
+                            child: GestureDetector(
+                              onLongPress: () {
+                                // Copy plain text on long press
+                                final plain = msg.content.replaceAll(RegExp(r'\[FILE\|.*?\]\(.*?\)'), '[file]');
+                                Clipboard.setData(ClipboardData(text: plain));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Copied to clipboard'),
+                                    duration: Duration(seconds: 1),
+                                    behavior: SnackBarBehavior.floating,
                                   ),
-                                  decoration: BoxDecoration(
-                                    gradient: isMe
-                                        ? const LinearGradient(
-                                            colors: [Color(0xFF0A66C2), Color(0xFF0284C7)],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          )
-                                        : null,
-                                    color: isMe ? null : themBubbleColor,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: (isMe ? const Color(0xFF0A66C2) : Colors.black).withOpacity(0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: const Radius.circular(20),
-                                      topRight: const Radius.circular(20),
-                                      bottomLeft: Radius.circular(isMe ? 20 : 4),
-                                      bottomRight: Radius.circular(isMe ? 4 : 20),
+                                );
+                              },
+                              child: Column(
+                                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    constraints: BoxConstraints(
+                                      maxWidth: MediaQuery.of(context).size.width * 0.72,
+                                    ),
+                                    padding: _hasMediaOnly(msg.content)
+                                        ? EdgeInsets.zero
+                                        : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    decoration: _hasMediaOnly(msg.content)
+                                        ? null
+                                        : BoxDecoration(
+                                            color: isMe
+                                                ? AppTheme.userPrimaryBlue
+                                                : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF0F2F5)),
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: const Radius.circular(18),
+                                              topRight: const Radius.circular(18),
+                                              bottomLeft: Radius.circular(isMe ? 18 : 4),
+                                              bottomRight: Radius.circular(isMe ? 4 : 18),
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.06),
+                                                blurRadius: 4,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                    child: _buildMessageContent(msg.content, isMe, isDark),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  // Timestamp + read status
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _formatMsgTime(msg.timestamp),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isDark ? Colors.white38 : Colors.grey[500],
+                                          ),
+                                        ),
+                                        if (isMe) ...[
+                                          const SizedBox(width: 3),
+                                          if (msg.isRead && index == 0)
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.done_all, size: 13,
+                                                    color: AppTheme.userPrimaryBlue),
+                                                const SizedBox(width: 2),
+                                                Text('Seen',
+                                                    style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: AppTheme.userPrimaryBlue,
+                                                        fontWeight: FontWeight.w600)),
+                                              ],
+                                            )
+                                          else if (msg.isRead)
+                                            Icon(Icons.done_all, size: 13,
+                                                color: AppTheme.userPrimaryBlue)
+                                          else
+                                            Icon(Icons.done, size: 13,
+                                                color: isDark ? Colors.white38 : Colors.grey[400]),
+                                        ],
+                                      ],
                                     ),
                                   ),
-                                  child: _buildMessageContent(msg.content, isMe, isDark),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: isDark ? Colors.white38 : const Color(0xFF666666),
-                                      ),
-                                    ),
-                                    if (isMe) ...[
-                                      const SizedBox(width: 4),
-                                      // Show "Seen" on last sent message if read, else double tick
-                                      if (msg.isRead && index == 0)
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.done_all, size: 12,
-                                                color: isDark ? Colors.lightBlueAccent : AppTheme.userPrimaryBlue),
-                                            const SizedBox(width: 2),
-                                            Text('Seen',
-                                                style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: isDark ? Colors.lightBlueAccent : AppTheme.userPrimaryBlue,
-                                                    fontWeight: FontWeight.w600)),
-                                          ],
-                                        )
-                                      else if (msg.isRead)
-                                        Icon(Icons.done_all, size: 12,
-                                            color: isDark ? Colors.lightBlueAccent : AppTheme.userPrimaryBlue)
-                                      else
-                                        Icon(Icons.done, size: 12,
-                                            color: isDark ? Colors.white38 : Colors.grey),
-                                    ],
-                                  ],
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
+
+                          if (isMe) const SizedBox(width: 4),
                         ],
                       ),
                     );

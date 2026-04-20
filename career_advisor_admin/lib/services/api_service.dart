@@ -604,6 +604,19 @@ class ApiService {
       '/api/admin/resumes',
       options: Options(extra: {'isAdmin': true}),
     );
+    final data = _handleResponse(response);
+    // Backend returns { content: [...], totalElements: N } — unwrap to list
+    if (data is Map && data['content'] is List) return data['content'];
+    if (data is List) return data;
+    return [];
+  }
+
+  Future<dynamic> fetchAdminAnalyses({int page = 0, int size = 20}) async {
+    final response = await _dio.get(
+      '/api/admin/analyses',
+      queryParameters: {'page': page, 'size': size},
+      options: Options(extra: {'isAdmin': true}),
+    );
     return _handleResponse(response);
   }
 

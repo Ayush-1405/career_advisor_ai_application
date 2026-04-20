@@ -63,7 +63,12 @@ router.post('/verify-login', async (req, res) => {
     const ok = await verifyOtpForLogin(email, code);
     if (!ok) return res.status(401).json({ status: 'ERROR', message: 'Invalid or expired code' });
 
-    const user = await User.findOneAndUpdate({ email }, { lastLogin: new Date() }, { new: true });
+    // Mark emailVerified=true on successful OTP login
+    const user = await User.findOneAndUpdate(
+      { email },
+      { lastLogin: new Date(), emailVerified: true },
+      { new: true }
+    );
     const token = generateToken(user.email, { role: 'ROLE_' + user.role, name: user.name, userId: user._id.toString() });
     await trackUserActivity(user._id.toString(), 'login', JSON.stringify({ email }));
     res.json({ token, role: user.role, email: user.email, name: user.name, userId: user._id.toString(), status: 'SUCCESS', message: 'Logged in successfully' });

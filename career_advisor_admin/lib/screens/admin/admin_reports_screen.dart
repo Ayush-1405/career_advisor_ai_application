@@ -2,9 +2,9 @@ import 'package:go_router/go_router.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../constants/app_roles.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/api_service.dart';
 import '../../widgets/animated_screen.dart';
 
@@ -50,58 +50,34 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
 
   Future<void> _handleExport(String format) async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final bytes = await ref
-          .read(apiServiceProvider)
-          .exportAdminReport(format);
-
+      setState(() => _isLoading = true);
+      final bytes = await ref.read(apiServiceProvider).exportAdminReport(format);
       if (!mounted) return;
+      if (bytes.isEmpty) throw Exception('Received empty file from server');
 
-      if (bytes.isEmpty) {
-        throw Exception('Received empty file from server');
-      }
+      final fileName = 'admin-report-${DateTime.now().toIso8601String().split('T')[0]}.$format';
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsBytes(bytes);
 
-      final fileName =
-          'admin-report-${DateTime.now().toIso8601String().split('T')[0]}.$format';
-
-      String? outputFile = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save Report',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: [format],
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: format == 'pdf' ? 'application/pdf' : 'text/csv')],
+        subject: 'Career Advisor Admin Report',
       );
 
-      if (outputFile != null) {
-        final file = File(outputFile);
-        await file.writeAsBytes(bytes);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Report saved to $outputFile'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Report ready: $fileName'), backgroundColor: Colors.green),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to export report: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -1194,7 +1170,7 @@ class _AdminReportsScreenState extends ConsumerState<AdminReportsScreen> {
                                 width: 10,
                                 height: 10,
                                 decoration: BoxDecoration(
-                                  color: AppRoles.isAdmin(e.key)
+                                  color: e.key.toUpperCase() == 'ADMIN'
                                       ? Colors.red
                                       : Colors.green,
                                   shape: BoxShape.circle,
