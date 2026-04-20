@@ -51,6 +51,26 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     const text = await extractText(file.path);
     const parsed = parseResumeFields(text);
 
+    // Upload to Cloudinary if configured, otherwise use local path
+    let fileUrl = null;
+    const useCloudinary = !!(
+      process.env.CLOUDINARY_CLOUD_NAME &&
+      process.env.CLOUDINARY_API_KEY &&
+      process.env.CLOUDINARY_API_SECRET
+    );
+    if (useCloudinary) {
+      try {
+        const { uploadToCloudinary } = require('../services/cloudinaryService');
+        const buf = fs.readFileSync(file.path);
+        const result = await uploadToCloudinary(buf, 'resumes', file.originalname);
+        fileUrl = result.url;
+        // Clean up local temp file
+        fs.unlink(file.path, () => {});
+      } catch (e) {
+        console.error('[Cloudinary] Resume upload error:', e.message);
+      }
+    }
+
     let profile = await ResumeProfile.findOne({ user: req.user._id });
     if (!profile) profile = new ResumeProfile({ user: req.user._id });
 
@@ -58,10 +78,11 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
       ...parsed,
       name: parsed.fullName || profile.name,
       originalFileName: file.originalname,
-      storedFileName: file.filename, // Using multer's filename
+      storedFileName: file.filename,
       fileType: path.extname(file.originalname).replace('.', ''),
       fileSize: file.size,
-      filePath: file.path,
+      filePath: fileUrl || file.path,
+      fileUrl: fileUrl,
       uploadedAt: new Date(),
     });
     await profile.save();
@@ -70,7 +91,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
 
     res.json({
       success: true,
-      storedFile: { originalFileName: file.originalname, path: file.path, size: file.size },
+      storedFile: { originalFileName: file.originalname, path: fileUrl || file.path, size: file.size, url: fileUrl },
       resume: profile,
     });
   } catch (e) {

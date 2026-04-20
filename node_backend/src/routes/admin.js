@@ -155,15 +155,46 @@ router.get('/analytics', async (req, res) => {
 
 router.get('/resumes', async (req, res) => {
   try {
-    const resumes = await Resume.find().populate('user').sort({ uploadedAt: -1 });
-    res.json(resumes);
+    const { page = 0, size = 20 } = req.query;
+    const total = await Resume.countDocuments();
+    const resumes = await Resume.find()
+      .populate('user', 'name email profilePictureUrl')
+      .sort({ uploadedAt: -1 })
+      .skip(parseInt(page) * parseInt(size))
+      .limit(parseInt(size));
+    res.json({ content: resumes, totalElements: total, totalPages: Math.ceil(total / parseInt(size)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/analyses', async (req, res) => {
   try {
-    const analyses = await ResumeAnalysis.find().populate('user').populate('resume').sort({ analyzedAt: -1 });
-    res.json(analyses);
+    const { page = 0, size = 20 } = req.query;
+    const total = await ResumeAnalysis.countDocuments();
+    const analyses = await ResumeAnalysis.find()
+      .populate('user', 'name email profilePictureUrl')
+      .populate('resume', 'fileName originalFileName filePath fileUrl')
+      .sort({ analyzedAt: -1 })
+      .skip(parseInt(page) * parseInt(size))
+      .limit(parseInt(size));
+
+    const data = analyses.map(a => ({
+      id: a._id.toString(),
+      userId: a.user?._id?.toString(),
+      userName: a.user?.name || 'Unknown',
+      userEmail: a.user?.email || '',
+      userAvatar: a.user?.profilePictureUrl || null,
+      resumeId: a.resume?._id?.toString(),
+      fileName: a.resume?.originalFileName || a.resume?.fileName || 'Unknown',
+      fileUrl: a.resume?.fileUrl || a.resume?.filePath || null,
+      overallScore: a.overallScore,
+      strengths: a.strengths,
+      improvements: a.improvements,
+      feedback: a.feedback,
+      careerPath: a.careerPath,
+      analyzedAt: a.analyzedAt,
+    }));
+
+    res.json({ content: data, totalElements: total, totalPages: Math.ceil(total / parseInt(size)) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

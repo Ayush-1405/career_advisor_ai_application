@@ -72,19 +72,36 @@ router.get('/', async (req, res) => {
 router.get('/recommendations', authenticate, async (req, res) => {
   try {
     const userId = req.user._id.toString();
-    // Find latest resume analysis to match skills
+
+    // Find latest resume analysis for this user
     const analysis = await ResumeAnalysis.findOne({ user: userId }).sort({ analyzedAt: -1 });
+
     if (analysis && analysis.strengths) {
-      const userSkills = analysis.strengths.split(',').map(s => s.trim().toLowerCase());
+      const userSkills = analysis.strengths.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
       const allPaths = await CareerPath.find();
+
+      // Score each career path by skill match
       const scored = allPaths.map(cp => {
-        const matchCount = (cp.requiredSkills || []).filter(s => userSkills.includes(s.toLowerCase())).length;
+        const matchCount = (cp.requiredSkills || []).filter(s =>
+          userSkills.some(us => s.toLowerCase().includes(us) || us.includes(s.toLowerCase()))
+        ).length;
         return { path: cp, score: matchCount };
-      }).sort((a, b) => b.score - a.score).slice(0, 5).map(x => x.path);
-      return res.json(scored);
+      }).sort((a, b) => b.score - a.score);
+
+      // Return top 5 with match score attached
+      const recommendations = scored.slice(0, 5).map(({ path, score }) => ({
+        ...path.toJSON(),
+        matchScore: allPaths.length > 0 ? Math.round((score / Math.max(path.requiredSkills?.length || 1, 1)) * 100) : 0,
+        analysisScore: analysis.overallScore,
+        suggestedCareerPath: analysis.careerPath,
+      }));
+
+      return res.json(recommendations);
     }
+
+    // No analysis — return all paths with 0 match score
     const paths = await CareerPath.find().limit(5);
-    res.json(paths);
+    return res.json(paths.map(p => ({ ...p.toJSON(), matchScore: 0 })));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
